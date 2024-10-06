@@ -1,13 +1,8 @@
-/*Temperature in Celsius 
-Flow rate in ml/min 
-Pressure in PSI 
-Voltage in V
-Current in mA
-*/
+
 
 // include necessary libraries
   #include <Wire.h>
-  #include "WiFiS3.h"
+  #include <WiFi.h>
   #include <Arduino.h>
   #include <SensirionI2cSf06Lf.h>
   #include <Adafruit_INA260.h>
@@ -16,11 +11,12 @@ Current in mA
   #include <PID_v1.h>
   #include <pwm.h>
   #include <RTC.h>
+  //#include <Arduino_AdvancedAnalog.h>
 
 // Digital pins for the IRQn pins of the flow sensors to connect to
-  #define IRQN_PIN_FLOW_SENSOR_A 13
-  #define IRQN_PIN_FLOW_SENSOR_B 12
-  #define IRQN_PIN_FLOW_SENSOR_C 11
+  #define IRQN_PIN_FLOW_SENSOR_A 16
+  #define IRQN_PIN_FLOW_SENSOR_B 17
+  #define IRQN_PIN_FLOW_SENSOR_C 18
 
 // I2C addresses for the flow sensors
   #define I2C_ADDR_FLOW_SENSOR_A 0x0A
@@ -47,8 +43,6 @@ Current in mA
   const float pMin = 0.0;     // Minimum pressure in PSI
   const float pMax = 15.0;    // Maximum pressure in PSI
 
-
-
 // Thermistor related macros
   #define SERIESRESISTOR 10000
   #define BCOEFFICIENT 3895
@@ -63,6 +57,7 @@ Current in mA
   File myFile; //Initialization of SD card reader
   PwmOut pwm(D5); //This is for the water block controller. Can be any digital pin, make changes to correct pin here
   #define DACPIN A0 //This is for buck convertor control. Change analog pin here
+  int decimalPlaces = 3;
 
 // WIFI related global variables, macros, and object
   #define SECRET_SSID "pigTrial"
@@ -99,7 +94,8 @@ Current in mA
     double SetpointWB, InputWB, OutputWB; // setpoint is desired temp, input is current temp, output is 0-255
     double Kp_WB=15, Ki_WB=10, Kd_WB=0;
     PID myPID_WB(&InputWB, &OutputWB, &SetpointWB, Kp_WB, Ki_WB, Kd_WB, DIRECT, REVERSE);   
-  
+    int freq = 0;
+
   //Temperature controls for PID loops
      //These are parameters that can be adjusted for temperature cutoffs -- TempIdeals are equivalent to Setpoint
     int BrainTempIdeal = 10; //Ideal brain temperature, currently 12 for testing purposes (should be 25)
@@ -139,6 +135,13 @@ Current in mA
     uint16_t samples30[NUMSAMPLES];
     uint16_t samples31[NUMSAMPLES];
     uint16_t samples32[NUMSAMPLES];
+
+//Relay Pin Placement
+  int peltierRelay = 14;
+  int pumpRelay = 15;
+
+//Max Water Block Temp and Freq Countdown info
+  int startTime = 0;  
 
 
 void setup() {
@@ -211,10 +214,20 @@ void setup() {
       myFile.println("Date,Time,Peltier Temp (C),Water Block Temp (C),Peltier Current (A),Peltier Voltage (V),Water Pump Current (A),Water Pump Voltage (V),Flow (mL),Pressure (psi),WiFI Client Status (0 = USB, 1 = WiFi");
       myFile.close(); 
 
+  //Turning on Power to Pump and Peltier
+    pinMode(peltierRelay, OUTPUT);
+    pinMode(pumpRelay, OUTPUT);
+    digitalWrite(peltierRelay, LOW); //For a normally open circuit and these relay specs, low means relay on and high means relay off.
+    digitalWrite(pumpRelay, LOW); 
+
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+
+  //Starting the RTC
+    RTCTime currentTime;
+    RTC.getTime(currentTime);
 
   //Determining if Wifi is Connected or Not
     if (status != WiFi.status()) {
@@ -467,107 +480,359 @@ void loop() {
 
   //Converting temp sensors data into actual degrees (Celsius)
     //First convert to a resistance value
-      int avgIntraArray1Resist = SERIESRESISTOR / (1023 /(avgIntraArray1) - 1);
-      int avgIntraArray2Resist = SERIESRESISTOR / (1023 /(avgIntraArray2) - 1);
-      int avgIntraArray3Resist = SERIESRESISTOR / (1023 /(avgIntraArray3) - 1);
-      int avgIntraArray4Resist = SERIESRESISTOR / (1023 /(avgIntraArray4) - 1);
-      int avgExtraArray1Resist = SERIESRESISTOR / (1023 /(avgExtraArray1) - 1);
-      int avgExtraArray2Resist = SERIESRESISTOR / (1023 /(avgExtraArray2) - 1);
-      int avgExtraArray3Resist = SERIESRESISTOR / (1023 /(avgExtraArray3) - 1);
-      int avgSWB1Resist = SERIESRESISTOR / (1023 /(avgSWB1) - 1);
-      int avgSWB2Resist = SERIESRESISTOR / (1023 /(avgSWB1) - 2);
-      int avgSWB3Resist = SERIESRESISTOR / (1023 /(avgSWB1) - 3);
-      int avgEntrSWB1Resist = SERIESRESISTOR / (1023 /(avgEntrSWB1) - 1);
-      int avgEntrSWB2Resist = SERIESRESISTOR / (1023 /(avgEntrSWB2) - 1);
-      int avgEntrSWB3Resist = SERIESRESISTOR / (1023 /(avgEntrSWB3) - 1);
-      int avgExitSWB1Resist = SERIESRESISTOR / (1023 /(avgExitSWB1) - 1);
-      int avgExitSWB2Resist = SERIESRESISTOR / (1023 /(avgExitSWB2) - 1);
-      int avgExitSWB3Resist = SERIESRESISTOR / (1023 /(avgExitSWB3) - 1);
-      int avgEntrBWB1Resist = SERIESRESISTOR / (1023 /(avgEntrBWB1) - 1);
-      int avgEntrBWB2Resist = SERIESRESISTOR / (1023 /(avgEntrBWB2) - 1);
-      int avgEntrBWB3Resist = SERIESRESISTOR / (1023 /(avgEntrBWB3) - 1);
-      int avgBWB1Resist = SERIESRESISTOR / (1023 /(avgBWB1) - 1);
-      int avgBWB2Resist = SERIESRESISTOR / (1023 /(avgBWB2) - 1);
-      int avgBWB3Resist = SERIESRESISTOR / (1023 /(avgBWB3) - 1);
-      int avgBWB4Resist = SERIESRESISTOR / (1023 /(avgBWB4) - 1);
-      int avgBWB5Resist = SERIESRESISTOR / (1023 /(avgBWB5) - 1);
-      int avgBWB6Resist = SERIESRESISTOR / (1023 /(avgBWB6) - 1);
-      int avgExitBWB1Resist = SERIESRESISTOR / (1023 /(avgExitBWB1) - 1);
-      int avgExitBWB2Resist = SERIESRESISTOR / (1023 /(avgExitBWB2) - 1);
-      int avgExitBWB3Resist = SERIESRESISTOR / (1023 /(avgExitBWB3) - 1);
+      float avgIntraArray1Resist = SERIESRESISTOR / (1023 /(avgIntraArray1) - 1);
+      float avgIntraArray2Resist = SERIESRESISTOR / (1023 /(avgIntraArray2) - 1);
+      float avgIntraArray3Resist = SERIESRESISTOR / (1023 /(avgIntraArray3) - 1);
+      float avgIntraArray4Resist = SERIESRESISTOR / (1023 /(avgIntraArray4) - 1);
+      float avgExtraArray1Resist = SERIESRESISTOR / (1023 /(avgExtraArray1) - 1);
+      float avgExtraArray2Resist = SERIESRESISTOR / (1023 /(avgExtraArray2) - 1);
+      float avgExtraArray3Resist = SERIESRESISTOR / (1023 /(avgExtraArray3) - 1);
+      float avgSWB1Resist = SERIESRESISTOR / (1023 /(avgSWB1) - 1);
+      float avgSWB2Resist = SERIESRESISTOR / (1023 /(avgSWB2) - 1);
+      float avgSWB3Resist = SERIESRESISTOR / (1023 /(avgSWB3) - 1);
+      float avgEntrSWB1Resist = SERIESRESISTOR / (1023 /(avgEntrSWB1) - 1);
+      float avgEntrSWB2Resist = SERIESRESISTOR / (1023 /(avgEntrSWB2) - 1);
+      float avgEntrSWB3Resist = SERIESRESISTOR / (1023 /(avgEntrSWB3) - 1);
+      float avgExitSWB1Resist = SERIESRESISTOR / (1023 /(avgExitSWB1) - 1);
+      float avgExitSWB2Resist = SERIESRESISTOR / (1023 /(avgExitSWB2) - 1);
+      float avgExitSWB3Resist = SERIESRESISTOR / (1023 /(avgExitSWB3) - 1);
+      float avgEntrBWB1Resist = SERIESRESISTOR / (1023 /(avgEntrBWB1) - 1);
+      float avgEntrBWB2Resist = SERIESRESISTOR / (1023 /(avgEntrBWB2) - 1);
+      float avgEntrBWB3Resist = SERIESRESISTOR / (1023 /(avgEntrBWB3) - 1);
+      float avgBWB1Resist = SERIESRESISTOR / (1023 /(avgBWB1) - 1);
+      float avgBWB2Resist = SERIESRESISTOR / (1023 /(avgBWB2) - 1);
+      float avgBWB3Resist = SERIESRESISTOR / (1023 /(avgBWB3) - 1);
+      float avgBWB4Resist = SERIESRESISTOR / (1023 /(avgBWB4) - 1);
+      float avgBWB5Resist = SERIESRESISTOR / (1023 /(avgBWB5) - 1);
+      float avgBWB6Resist = SERIESRESISTOR / (1023 /(avgBWB6) - 1);
+      float avgExitBWB1Resist = SERIESRESISTOR / (1023 /(avgExitBWB1) - 1);
+      float avgExitBWB2Resist = SERIESRESISTOR / (1023 /(avgExitBWB2) - 1);
+      float avgExitBWB3Resist = SERIESRESISTOR / (1023 /(avgExitBWB3) - 1);
     //Convert Resistance to Temperature
-      int steinhartIntraArray1 = 1/((log(avgIntraArray1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartIntraArray2 = 1/((log(avgIntraArray2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartIntraArray3 = 1/((log(avgIntraArray3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartIntraArray4 = 1/((log(avgIntraArray4Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExtraArray1 = 1/((log(avgExtraArray1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExtraArray2 = 1/((log(avgExtraArray2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExtraArray3 = 1/((log(avgExtraArray3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartSWB1 = 1/((log(avgSWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartSWB2 = 1/((log(avgSWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartSWB3 = 1/((log(avgSWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartEntrSWB1 = 1/((log(avgEntrSWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartEntrSWB2 = 1/((log(avgEntrSWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartEntrSWB3 = 1/((log(avgEntrSWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExitSWB1 = 1/((log(avgExitSWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExitSWB2 = 1/((log(avgExitSWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExitSWB3 = 1/((log(avgExitSWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartEntrBWB1 = 1/((log(avgEntrBWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartEntrBWB2 = 1/((log(avgEntrBWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartEntrBWB3 = 1/((log(avgEntrBWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartBWB1 = 1/((log(avgBWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartBWB2 = 1/((log(avgBWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartBWB3 = 1/((log(avgBWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartBWB4 = 1/((log(avgBWB4Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartBWB5 = 1/((log(avgBWB5Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartBWB6 = 1/((log(avgBWB6Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExitBWB1 = 1/((log(avgExitBWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExitBWB2 = 1/((log(avgExitBWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-      int steinhartExitBWB3 = 1/((log(avgExitBWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartIntraArray1 = 1/((log(avgIntraArray1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartIntraArray2 = 1/((log(avgIntraArray2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartIntraArray3 = 1/((log(avgIntraArray3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartIntraArray4 = 1/((log(avgIntraArray4Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExtraArray1 = 1/((log(avgExtraArray1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExtraArray2 = 1/((log(avgExtraArray2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExtraArray3 = 1/((log(avgExtraArray3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartSWB1 = 1/((log(avgSWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartSWB2 = 1/((log(avgSWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartSWB3 = 1/((log(avgSWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartEntrSWB1 = 1/((log(avgEntrSWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartEntrSWB2 = 1/((log(avgEntrSWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartEntrSWB3 = 1/((log(avgEntrSWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExitSWB1 = 1/((log(avgExitSWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExitSWB2 = 1/((log(avgExitSWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExitSWB3 = 1/((log(avgExitSWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartEntrBWB1 = 1/((log(avgEntrBWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartEntrBWB2 = 1/((log(avgEntrBWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartEntrBWB3 = 1/((log(avgEntrBWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartBWB1 = 1/((log(avgBWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartBWB2 = 1/((log(avgBWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartBWB3 = 1/((log(avgBWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartBWB4 = 1/((log(avgBWB4Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartBWB5 = 1/((log(avgBWB5Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartBWB6 = 1/((log(avgBWB6Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExitBWB1 = 1/((log(avgExitBWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExitBWB2 = 1/((log(avgExitBWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
+      float steinhartExitBWB3 = 1/((log(avgExitBWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
 
   //Average multiple temp sensors into 1 temperature
-    int IntraArrayTemp = (steinhartIntraArray1 + steinhartIntraArray2 + steinhartIntraArray3 + steinhartIntraArray4) / 4;
-    int ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
-    int SWBTemp = (steinhartSWB1 + steinhartSWB2 + steinhartSWB3) / 3;
-    int EntrSWBTemp = (steinhartEntrSWB1 + steinhartEntrSWB2 + steinhartEntrSWB3) / 3;
-    int ExitSWBTemp= (steinhartExitSWB1 + steinhartExitSWB2 + steinhartExitSWB3) / 3;
-    int EntrBWBTemp = (steinhartEntrBWB1 + steinhartEntrBWB2 + steinhartEntrBWB3) / 3;
-    int BWBTemp = (steinhartBWB1 + steinhartBWB2 + steinhartBWB3 + steinhartBWB4 + steinhartBWB5 + steinhartBWB6) / 6;
-    int ExitBWBTemp = (steinhartExitBWB1 + steinhartExitBWB2 + steinhartExitBWB3) / 3;
+    float IntraArrayTemp = (steinhartIntraArray1 + steinhartIntraArray2 + steinhartIntraArray3 + steinhartIntraArray4) / 4;
+    float ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
+    float SWBTemp = (steinhartSWB1 + steinhartSWB2 + steinhartSWB3) / 3;
+    float EntrSWBTemp = (steinhartEntrSWB1 + steinhartEntrSWB2 + steinhartEntrSWB3) / 3;
+    float ExitSWBTemp= (steinhartExitSWB1 + steinhartExitSWB2 + steinhartExitSWB3) / 3;
+    float EntrBWBTemp = (steinhartEntrBWB1 + steinhartEntrBWB2 + steinhartEntrBWB3) / 3;
+    float BWBTemp = (steinhartBWB1 + steinhartBWB2 + steinhartBWB3 + steinhartBWB4 + steinhartBWB5 + steinhartBWB6) / 6;
+    float ExitBWBTemp = (steinhartExitBWB1 + steinhartExitBWB2 + steinhartExitBWB3) / 3;
 
+  //Peltier Plate PID
+    float braintemp_atm;
+    braintemp_atm = (IntraArrayTemp + ExtraArrayTemp) / 2; //This is the current brain temperature
+    InputPeltierPID = braintemp_atm;
+    myPID_peltier.Compute();
+    analogWrite(DACPIN, 255-OutputPeltierPID);
 
+  //Water Pump/Block PID
+    float WBTemp_atm;
+    WBTemp_atm = SWBTemp;
+    if (WBTemp_atm >= WBTempIdeal) {
+      InputWB = WBTemp_atm;
+      myPID_WB.Compute();
+      freq = (OutputWB * (60)) / 255;
+      pwm.period_raw(50000000/freq); ///50000000 might need some adjustmnet, it is rough ballpark
+      pwm.pulse_perc(50.0f);
+    }
+
+  //Peltier Overcurrent and Overvoltage Protection
+    float peltierCurrent;
+    peltierCurrent = peltierINA260.readCurrent()/1000;
+    float peltierVoltage;
+    peltierVoltage = peltierINA260.readBusVoltage()/1000;
+    //Turn on Power to peltier if too high
+      if (peltierCurrent >= 2 || peltierVoltage >= 8) {
+        analogWrite(DACPIN, 255);
+        digitalWrite(peltierRelay, LOW);
+
+        Serial.print("ERROR: Peltier Overcurrenting/volting");
+        client.print("ERROR: Peltier Overcurrenting/volting");
+      }
+
+  //Pump Overcurrent and Overvoltage Protection
+    float pumpCurrent;
+    pumpCurrent = pumpINA260.readCurrent()/1000;
+    float pumpVoltage;
+    pumpVoltage = pumpINA260.readBusVoltage()/1000;
+    //Turn off Power to pump if too high
+      if (pumpVoltage >= 5.3) {
+        digitalWrite(pumpRelay, HIGH);
+        freq = 0;
+        pwm.period_raw(50000000/freq); ///50000000 might need some adjustmnet, it is rough ballpark
+        pwm.pulse_perc(50.0f);
+        analogWrite(DACPIN, 255);
+        digitalWrite(peltierRelay, HIGH);
+
+        Serial.println("ERROR: Water Pump Overvolting");
+        client.println("ERROR: Water Pump Overvolting");
+      }
+
+  //Flow Rate Sensor Detection
+    float aFlow = 0.0;
+    float aTemperature = 0.0;
+    uint16_t aSignalingFlags = 0u;
+    flowSensorA.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, aFlow, aTemperature, aSignalingFlags);
+    float bFlow = 0.0;
+    float bTemperature = 0.0;
+    uint16_t bSignalingFlags = 0u;
+    flowSensorB.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, bFlow, bTemperature, bSignalingFlags);
+    float cFlow = 0.0;
+    float cTemperature = 0.0;
+    uint16_t cSignalingFlags = 0u;
+    flowSensorC.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, cFlow, cTemperature, cSignalingFlags);
+
+  //Sudden Flow Rate Drop Detection
+    if (aFlow = 0) {
+        digitalWrite(pumpRelay, HIGH);
+        freq = 0;
+        pwm.period_raw(50000000/freq); ///50000000 might need some adjustmnet, it is rough ballpark
+        pwm.pulse_perc(50.0f);
+        analogWrite(DACPIN, 255);
+        digitalWrite(peltierRelay, HIGH);
+
+        Serial.println("ERROR: No Flow Detected");
+        client.println("ERROR: No Flow Detected");
+    }
+
+  //Detecting Pressure Values
+    //Converting from input to voltage (conversion from spec sheet)
+    float pressureSensor1Volt = avgPressureSensor1 * (3.2 / 1023.0);
+    float pressureSensor2Volt = avgPressureSensor2 * (3.2 / 1023.0);
+    float pressureSensor3Volt = avgPressureSensor3 * (3.2 / 1023.0);
+    float pressureSensor4Volt = avgPressureSensor4 * (3.2 / 1023.0);
+
+    //Converting Voltage to pressure (conversion from spec sheet)
+    float pressureApplied1 = (15 / (0.8 * 5)) * (pressureSensor1Volt - 0.5) + 0;
+    float pressureApplied2 = (15 / (0.8 * 5)) * (pressureSensor2Volt - 0.5) + 0;
+    float pressureApplied3 = (15 / (0.8 * 5)) * (pressureSensor3Volt - 0.5) + 0;
+    float pressureApplied4 = (15 / (0.8 * 5)) * (pressureSensor4Volt - 0.5) + 0;
+
+  //Turn off system if abnormal pressure
+    float lowPressure = 0.75;
+    float highPressure = 2;
+    if (pressureApplied1 < lowPressure || pressureApplied1 > highPressure ){
+        analogWrite(DACPIN, 255); //DACPIN 0 means completely on, 255 means off
+        freq = 0; //Turning off water pumps
+        pwm.period_raw(50000000/freq);
+        pwm.pulse_perc(50.0f);
+        
+        Serial.print("ERROR: Aberrant Pressure Levels");
+        Serial.println(pressureApplied);
+        
+        client.print("ERROR: Aberrant Pressure Levels");
+        client.println(pressureApplied);
+
+    } 
+
+  //Water block temp 6 degrees above baseline and max flow rate --> Countdown for 3 minutes activates
+    if (WBTemp_atm >= WBTempMax && freq == 60) {
+      startTime = startTime; //If maxxing out, keep the starttime of the max the same
+    } else {
+      int newTime = millis(); //If normal operations, update startime with current time
+      startTime = newTime;
+    }
+      int TimeATM = millis();
+    if (TimeATM - startTime >= 180000) { //1000 ms/s * 60 s/min * 3 min
+      //If it is greater than 3 minutes, shutting everything down
+      analogWrite(DACPIN, 255);
+      freq = 0;
+      pwm.period_raw(50000000/freq);
+      pwm.pulse_perc(50.0f);
+      digitalWrite(peltierRelay, HIGH);
+      digitalWrite(pumpRelay, HIGH);
+      
+      Serial.println("CRITICAL ERROR: Cooling failed, Shutting system down");
+      client.println("CRITICAL ERROR: Cooling failed, Shutting system down");
+    }
+
+  //Save Data to SD Card
+    myFile = SD.open("Testing.txt", FILE_WRITE); //Opening the file here
     
+    myFile.print(currentTime.getDayOfMonth());
+    myFile.print("/");
+    myFile.print(Month2int(currentTime.getMonth()));
+    myFile.print("/");
+    myFile.print(currentTime.getYear());
+    myFile.print(",");
+    myFile.print(currentTime.getHour());
+    myFile.print(":");
+    myFile.print(currentTime.getMinutes());
+    myFile.print(":");
+    myFile.print(currentTime.getSeconds());
+    myFile.print(",");
 
-  
+    myFile.print(braintemp_atm);
+    myFile.print(",");
+    myFile.print(WBTemp_atm); //Saving the data here. It is done like this so easy import to CSV format
+    myFile.print(",");
+    myFile.print(peltierCurrent);
+    myFile.print(",");
+    myFile.print(peltierINA260.readBusVoltage()/1000);
+    myFile.print(",");
+    myFile.print(pumpINA260.readCurrent()/1000);
+    myFile.print(",");
+    myFile.print(pumpINA260.readBusVoltage()/1000);
+    myFile.print(",");
+    myFile.print(aFlow);
+    myFile.print(",");
+    myFile.print(pressureApplied1);
+    myFile.print(",");
+    myFile.println(clientStatus);
+    myFile.close();
+ 
+  //Sending data to Serial
+    //Printing Client Stats
+      Serial.print("Client Status");
+      Serial.print(clientStatus);
+        Serial.print("\t");
+    //Printing Time and Data
+      Serial.print(currentTime.getDayOfMonth());
+      Serial.print("/");
+      Serial.print(Month2int(currentTime.getMonth()));
+      Serial.print("/");
+      Serial.print(currentTime.getYear());
+        Serial.print("\t");
+      Serial.print(currentTime.getHour());
+      Serial.print(":");
+      Serial.print(currentTime.getMinutes());
+      Serial.print(":");
+      Serial.print(currentTime.getSeconds());
+        Serial.print("\t");
+    //Printing Temperature Info
+      Serial.print("Brain Temp:");
+      Serial.print(braintemp_atm);
+        Serial.print("\t");
+      Serial.print("Water Block Temp:");
+      Serial.print(WBTemp_atm);
+        Serial.print("\t");
+    //PID Strength
+      Serial.print("P_OUT(div10):");
+      Serial.print(OutputPeltierPID/10);
+        Serial.print("\t");  
+      Serial.print("WB_OUT(div10):");
+      Serial.print(OutputWB/10);
+        Serial.print("\t");
+      Serial.print("FREQ:");
+      Serial.print(freq);
+        Serial.print("\t");
+    //Current and Voltage Sensors
+      Serial.print("Peltier Current:");
+      Serial.print(peltierCurrent);
+        Serial.print("\t");
+      Serial.print("Peltier Voltage");
+      Serial.print(peltierINA260.readBusVoltage()/1000);
+        Serial.print("\t");
+      Serial.print("Water Pump Current:");
+      Serial.print(pumpINA260.readCurrent()/1000);
+        Serial.print("\t");
+      Serial.print("Water Pump Voltage:");
+      Serial.print(pumpINA260.readBusVoltage()/1000);
+        Serial.print("\t");
+    //Flow Rate Sensors
+      Serial.print("aFlow: ");
+      Serial.print(aFlow);
+        Serial.print("\t");
+    //Pressure Sensors
+      Serial.print(pressureApplied1, decimalPlaces);
+      Serial.println("psi");
+        Serial.print("\t");
+
+
+
+  //Sending Data to Client
+    //Printing Client Stats
+      client.print("Client Status");
+      client.print(clientStatus);
+        client.print("\t");
+    //Printing Time and Data
+      client.print(currentTime.getDayOfMonth());
+      client.print("/");
+      client.print(Month2int(currentTime.getMonth()));
+      client.print("/");
+      client.print(currentTime.getYear());
+        client.print("\t");
+      client.print(currentTime.getHour());
+      client.print(":");
+      client.print(currentTime.getMinutes());
+      client.print(":");
+      client.print(currentTime.getSeconds());
+        client.print("\t");
+    //Printing Temperature Info
+      client.print("Brain Temp:");
+      client.print(braintemp_atm);
+        client.print("\t");
+      client.print("Water Block Temp:");
+      client.print(WBTemp_atm);
+        client.print("\t");
+    //PID Strength
+      client.print("P_OUT(div10):");
+      client.print(OutputPeltierPID/10);
+        client.print("\t");  
+      client.print("WB_OUT(div10):");
+      client.print(OutputWB/10);
+        client.print("\t");
+      client.print("FREQ:");
+      client.print(freq);
+        client.print("\t");
+    //Current and Voltage Sensors
+      client.print("Peltier Current:");
+      client.print(peltierCurrent);
+        client.print("\t");
+      client.print("Peltier Voltage");
+      client.print(peltierINA260.readBusVoltage()/1000);
+        client.print("\t");
+      client.print("Water Pump Current:");
+      client.print(pumpINA260.readCurrent()/1000);
+        client.print("\t");
+      client.print("Water Pump Voltage:");
+      client.print(pumpINA260.readBusVoltage()/1000);
+        client.print("\t");
+    //Flow Rate Sensors
+      client.print("aFlow: ");
+      client.print(aFlow);
+        client.print("\t");
+    //Pressure Sensors
+      client.print(pressureApplied1, decimalPlaces);
+      client.println("psi");
+        client.print("\t");
 
 
 
 }
 
-/*
-printCurrentSensorOutput(Adafruit_INA260& sensor, WiFiClient& client) -  
-Parameters - none
-Return - none (function return type: void) 
-*/
-void printCurrentSensorOutput(Adafruit_INA260& sensor, WiFiClient& client) {
 
-  currentCount += 1;
-  client.print(waqt);
-  client.print(" ");
-  client.print("V");
-  client.print(currentCount);
-  client.print(" ");
-  client.print(sensor.readBusVoltage()/1000.0);
-  client.println(" V");
 
-  client.print(waqt);
-  client.print(" ");
-  client.print("C");
-  client.print(currentCount);
-  client.print(" ");
-  client.print(sensor.readCurrent());
-  client.println(" mA");
-}
 
 
 /*
@@ -590,71 +855,6 @@ void currentSensorSetUp() {
   }
   Serial.println("Found peltier current sensor");
   Serial.println();
-}
-
-
-/*
-readPressure(int sigPin) -  
-Parameters - 
-  int sigPin
-Return - pressureApplied (function return type: float) 
-*/
-float readPressure(int sigPin) {
-  delay(50);
-  int total = 0;
-
-  for (int i = 0; i < sampleSize; i++) {
-    // Read the voltage from the pressure sensor
-    // analogRead() returns an integer between 0-1023 (or 0-16383 if resolution changed to 14-bit)
-    int sensorValue = analogRead(sigPin);
-    total += sensorValue;
-    delay(0);
-  }
-
-  // Find the average of the sensor value readings 
-  int averageSensorValue = total / sampleSize;
-
-  // Convert the analog reading to voltage (0-5V)
-  //float outputVoltage = averageSensorValue * (5.0 / 16383.0);
-  //float outputVoltage = averageSensorValue * (5.0 / 1023.0);
-  float outputVoltage = averageSensorValue * (3.0 / 1023.0);
-
-  // pressureApplied = 15/(0.8*5)*(Vout-0.5) + 0
-  float pressureApplied = 15 / (0.8 * 5) * (outputVoltage - 0.5) + 0;
-
-  return pressureApplied;
-}
-
-
-/*
-printFlowSensorOutput(SensirionI2cSf06Lf& sensor, WiFiClient& client) - 
-Parameters - 
-  SensirionI2cSf06Lf& sensor
-  WiFiClient& client
-Return - none (function return type: void) 
-*/
-void printFlowSensorOutput(SensirionI2cSf06Lf& sensor, WiFiClient& client) {
-  float aFlow = 0.0;
-  float aTemperature = 0.0;
-  uint16_t aSignalingFlags = 0u;
-  delay(20);
-  sensor.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, aFlow, aTemperature, aSignalingFlags);
-
-  tempCount += 1;
-  client.print(waqt);
-  client.print(" ");
-  client.print("T");
-  client.print(tempCount);
-  client.print(" ");
-  client.println(aTemperature);
-
-  flowCount += 1;
-  client.print(waqt);
-  client.print(" ");
-  client.print("F");
-  client.print(flowCount);
-  client.print(" ");
-  client.println(aFlow);
 }
 
 
