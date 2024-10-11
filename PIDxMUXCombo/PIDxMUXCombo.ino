@@ -1,5 +1,4 @@
 
-
 // include necessary libraries
   #include <Wire.h>
   #include <WiFi.h>
@@ -9,28 +8,30 @@
   #include <SPI.h>
   #include <SD.h>
   #include <PID_v1.h>
-  #include <pwm.h>
-  #include <RTC.h>
-  //#include <Arduino_AdvancedAnalog.h>
+  #include <mbed.h>
+  #include <mbed_mktime.h>
+  #include <PwmOut.h>
+  #include <AdvancedDAC.h>
+  #include <Arduino_AdvancedAnalog.h>
 
 // Digital pins for the IRQn pins of the flow sensors to connect to
   #define IRQN_PIN_FLOW_SENSOR_A 16
   #define IRQN_PIN_FLOW_SENSOR_B 17
-  #define IRQN_PIN_FLOW_SENSOR_C 18
+  //#define IRQN_PIN_FLOW_SENSOR_C 18
 
 // I2C addresses for the flow sensors
   #define I2C_ADDR_FLOW_SENSOR_A 0x0A
   #define I2C_ADDR_FLOW_SENSOR_B 0x0B
-  #define I2C_ADDR_FLOW_SENSOR_C 0x0C
+  //#define I2C_ADDR_FLOW_SENSOR_C 0x0C
 
 // Define the flow sensor objects 
   SensirionI2cSf06Lf flowSensorA;
   SensirionI2cSf06Lf flowSensorB;
-  SensirionI2cSf06Lf flowSensorC;
+  //SensirionI2cSf06Lf flowSensorC;
 
 // Error message for flow sensor
   static char errorMessage[64];
-  static int16_t error;
+  static uint16_t error1;
 
 // Define current sensor objects and I2C addresses 
   Adafruit_INA260 pumpINA260 = Adafruit_INA260();
@@ -55,8 +56,8 @@
   const int sampleSize = 10;   // Sample size
   const int NUMSAMPLES = 10;
   File myFile; //Initialization of SD card reader
-  PwmOut pwm(D5); //This is for the water block controller. Can be any digital pin, make changes to correct pin here
-  #define DACPIN A0 //This is for buck convertor control. Change analog pin here
+  //PinName pin = digitalPinToPinName(D11); //This is for the water block controller. Can be any digital pin, make changes to correct pin here
+  #define DACPIN A12
   int decimalPlaces = 3;
 
 // WIFI related global variables, macros, and object
@@ -147,7 +148,8 @@
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-
+  Wire1.begin();
+   while (!Serial) {};
   //Turning on Multiplexer and Initializing Pins
     // set the control pins of MUX1 (S0-S3) to be output pins
       // meaning the control pins will be used to select which one of the 16 channels to read from
@@ -183,9 +185,8 @@ void setup() {
       flowSensorSetUp();
     //Starting up Current and Voltage Sensors
       currentSensorSetUp();
-  
-  // set the reference voltage for analog-to-digital conversion to an external source for accuracy
-    analogReference(AR_EXTERNAL);
+
+      
 
   //Setting up WiFi
     Serial.println("WIFI setup: "); 
@@ -196,13 +197,11 @@ void setup() {
     server.begin();
 
   //Setting up RTC for Data Time Saving. Adjust to date of implantation
-    RTC.begin();
-    RTCTime startTime(26, Month::SEPTEMBER, 2024, 15, 42, 00, DayOfWeek::THURSDAY, SaveLight::SAVING_TIME_ACTIVE);
-    RTC.setTime(startTime);
+    RTCset();
 
   //Initializing SD Card
     //Default CS pin is 4. Change to current pin if not working
-    if (!SD.begin(4)) {
+    if (!SD.begin(10)) {
     Serial.println("initialization failed!");
     while (1);
     }
@@ -220,14 +219,21 @@ void setup() {
     digitalWrite(peltierRelay, LOW); //For a normally open circuit and these relay specs, low means relay on and high means relay off.
     digitalWrite(pumpRelay, LOW); 
 
+  //Initializing PWM pin
+    /*mbed::PwmOut* pwm = new mbed::PwmOut(pin);
+    pwm->period_ms(0); //1kHz
+    pwm->pulsewidth_us(0);*/
+  
+  //Initializing DAC
+    pinMode(DACPIN, OUTPUT);
+
+    Serial.print("1");
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
 
-  //Starting the RTC
-    RTCTime currentTime;
-    RTC.getTime(currentTime);
+ // mbed::PwmOut* pwm = new mbed::PwmOut(pin);
 
   //Determining if Wifi is Connected or Not
     if (status != WiFi.status()) {
@@ -243,6 +249,8 @@ void loop() {
     }
     }
 
+  Serial.print("2");
+
   //Establishing Variable for printing depending on connection or not
     WiFiClient client = server.available();  
     int clientStatus;
@@ -253,6 +261,7 @@ void loop() {
       clientStatus = 0;
     }
 
+Serial.print("3");
   //Getting all analog sensor data at once
     uint8_t i;
     waqt = millis()/1000;
@@ -341,7 +350,7 @@ void loop() {
 
       delay(10);
     }
-
+Serial.print(4);
   
   //Average each sensors data
     float avgIntraArray1;
@@ -477,6 +486,8 @@ void loop() {
     avgPressureSensor2 = avgPressureSensor2/NUMSAMPLES;
     avgPressureSensor3 = avgPressureSensor3/NUMSAMPLES;
     avgPressureSensor4 = avgPressureSensor4/NUMSAMPLES;
+    
+Serial.print("5");    
 
   //Converting temp sensors data into actual degrees (Celsius)
     //First convert to a resistance value
@@ -537,7 +548,7 @@ void loop() {
       float steinhartExitBWB1 = 1/((log(avgExitBWB1Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
       float steinhartExitBWB2 = 1/((log(avgExitBWB2Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
       float steinhartExitBWB3 = 1/((log(avgExitBWB3Resist / THERMISTORNOMINAL))/BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15))-273.15;
-
+Serial.print("6");
   //Average multiple temp sensors into 1 temperature
     float IntraArrayTemp = (steinhartIntraArray1 + steinhartIntraArray2 + steinhartIntraArray3 + steinhartIntraArray4) / 4;
     float ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
@@ -555,6 +566,7 @@ void loop() {
     myPID_peltier.Compute();
     analogWrite(DACPIN, 255-OutputPeltierPID);
 
+Serial.print("7");
   //Water Pump/Block PID
     float WBTemp_atm;
     WBTemp_atm = SWBTemp;
@@ -562,9 +574,11 @@ void loop() {
       InputWB = WBTemp_atm;
       myPID_WB.Compute();
       freq = (OutputWB * (60)) / 255;
-      pwm.period_raw(50000000/freq); ///50000000 might need some adjustmnet, it is rough ballpark
-      pwm.pulse_perc(50.0f);
+      float period_millisec = 1/freq * 1000;
+      //pwm->period_ms(period_millisec);
+      //pwm->pulsewidth_us(period_millisec*1000/2);
     }
+Serial.print("8");
 
   //Peltier Overcurrent and Overvoltage Protection
     float peltierCurrent;
@@ -579,7 +593,7 @@ void loop() {
         Serial.print("ERROR: Peltier Overcurrenting/volting");
         client.print("ERROR: Peltier Overcurrenting/volting");
       }
-
+Serial.print("9");
   //Pump Overcurrent and Overvoltage Protection
     float pumpCurrent;
     pumpCurrent = pumpINA260.readCurrent()/1000;
@@ -589,15 +603,16 @@ void loop() {
       if (pumpVoltage >= 5.3) {
         digitalWrite(pumpRelay, HIGH);
         freq = 0;
-        pwm.period_raw(50000000/freq); ///50000000 might need some adjustmnet, it is rough ballpark
-        pwm.pulse_perc(50.0f);
+        float period_millisec = 1/freq * 1000;
+        //pwm->period_ms(period_millisec);
+        //pwm->pulsewidth_us(period_millisec*1000/2);
         analogWrite(DACPIN, 255);
         digitalWrite(peltierRelay, HIGH);
 
         Serial.println("ERROR: Water Pump Overvolting");
         client.println("ERROR: Water Pump Overvolting");
       }
-
+Serial.print("10");
   //Flow Rate Sensor Detection
     float aFlow = 0.0;
     float aTemperature = 0.0;
@@ -607,24 +622,25 @@ void loop() {
     float bTemperature = 0.0;
     uint16_t bSignalingFlags = 0u;
     flowSensorB.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, bFlow, bTemperature, bSignalingFlags);
-    float cFlow = 0.0;
-    float cTemperature = 0.0;
-    uint16_t cSignalingFlags = 0u;
-    flowSensorC.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, cFlow, cTemperature, cSignalingFlags);
-
+    //float cFlow = 0.0;
+    //float cTemperature = 0.0;
+    //uint16_t cSignalingFlags = 0u;
+    //flowSensorC.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, cFlow, cTemperature, cSignalingFlags);
+Serial.print("11");
   //Sudden Flow Rate Drop Detection
     if (aFlow = 0) {
         digitalWrite(pumpRelay, HIGH);
         freq = 0;
-        pwm.period_raw(50000000/freq); ///50000000 might need some adjustmnet, it is rough ballpark
-        pwm.pulse_perc(50.0f);
+        float period_millisec = 1/freq * 1000;
+        //pwm->period_ms(period_millisec);
+        //pwm->pulsewidth_us(period_millisec*1000/2);
         analogWrite(DACPIN, 255);
         digitalWrite(peltierRelay, HIGH);
 
         Serial.println("ERROR: No Flow Detected");
         client.println("ERROR: No Flow Detected");
     }
-
+Serial.print("12");
   //Detecting Pressure Values
     //Converting from input to voltage (conversion from spec sheet)
     float pressureSensor1Volt = avgPressureSensor1 * (3.2 / 1023.0);
@@ -644,14 +660,15 @@ void loop() {
     if (pressureApplied1 < lowPressure || pressureApplied1 > highPressure ){
         analogWrite(DACPIN, 255); //DACPIN 0 means completely on, 255 means off
         freq = 0; //Turning off water pumps
-        pwm.period_raw(50000000/freq);
-        pwm.pulse_perc(50.0f);
+        float period_millisec = 1/freq * 1000;
+        //pwm->period_ms(period_millisec);
+        //pwm->pulsewidth_us(period_millisec*1000/2);
         
         Serial.print("ERROR: Aberrant Pressure Levels");
-        Serial.println(pressureApplied);
+        Serial.println(pressureApplied1);
         
         client.print("ERROR: Aberrant Pressure Levels");
-        client.println(pressureApplied);
+        client.println(pressureApplied1);
 
     } 
 
@@ -667,8 +684,9 @@ void loop() {
       //If it is greater than 3 minutes, shutting everything down
       analogWrite(DACPIN, 255);
       freq = 0;
-      pwm.period_raw(50000000/freq);
-      pwm.pulse_perc(50.0f);
+      float period_millisec = 1/freq * 1000;
+      //pwm->period_ms(period_millisec);
+      //pwm->pulsewidth_us(period_millisec*1000/2);
       digitalWrite(peltierRelay, HIGH);
       digitalWrite(pumpRelay, HIGH);
       
@@ -679,17 +697,7 @@ void loop() {
   //Save Data to SD Card
     myFile = SD.open("Testing.txt", FILE_WRITE); //Opening the file here
     
-    myFile.print(currentTime.getDayOfMonth());
-    myFile.print("/");
-    myFile.print(Month2int(currentTime.getMonth()));
-    myFile.print("/");
-    myFile.print(currentTime.getYear());
-    myFile.print(",");
-    myFile.print(currentTime.getHour());
-    myFile.print(":");
-    myFile.print(currentTime.getMinutes());
-    myFile.print(":");
-    myFile.print(currentTime.getSeconds());
+    myFile.print(getLocaltime());
     myFile.print(",");
 
     myFile.print(braintemp_atm);
@@ -717,17 +725,7 @@ void loop() {
       Serial.print(clientStatus);
         Serial.print("\t");
     //Printing Time and Data
-      Serial.print(currentTime.getDayOfMonth());
-      Serial.print("/");
-      Serial.print(Month2int(currentTime.getMonth()));
-      Serial.print("/");
-      Serial.print(currentTime.getYear());
-        Serial.print("\t");
-      Serial.print(currentTime.getHour());
-      Serial.print(":");
-      Serial.print(currentTime.getMinutes());
-      Serial.print(":");
-      Serial.print(currentTime.getSeconds());
+      Serial.print(getLocaltime());
         Serial.print("\t");
     //Printing Temperature Info
       Serial.print("Brain Temp:");
@@ -776,17 +774,7 @@ void loop() {
       client.print(clientStatus);
         client.print("\t");
     //Printing Time and Data
-      client.print(currentTime.getDayOfMonth());
-      client.print("/");
-      client.print(Month2int(currentTime.getMonth()));
-      client.print("/");
-      client.print(currentTime.getYear());
-        client.print("\t");
-      client.print(currentTime.getHour());
-      client.print(":");
-      client.print(currentTime.getMinutes());
-      client.print(":");
-      client.print(currentTime.getSeconds());
+      client.print(getLocaltime());
         client.print("\t");
     //Printing Temperature Info
       client.print("Brain Temp:");
@@ -865,9 +853,9 @@ Parameters - none
 Return - none (function return type: void) 
 */
 void flowSensorSetUp() {
-  error = NO_ERROR;
+  error1 = NO_ERROR;
 
-  Wire.begin();
+  Wire1.begin();
 
   // Make sure that sensors are in proper state to perform a address change by
   // doing a soft reset and not sending any other commands prior to the
@@ -879,10 +867,10 @@ void flowSensorSetUp() {
   // Change address of the first sensor
   // Set IRQN_PIN_SENSOR_A to the GPIO pin number where you connected Pin 1
   // of your first sensor.
-  error = changeSensorAddress(Wire, I2C_ADDR_FLOW_SENSOR_A, IRQN_PIN_FLOW_SENSOR_A);
-  if (error != NO_ERROR) {
+  error1 = changeSensorAddress(Wire1, I2C_ADDR_FLOW_SENSOR_A, IRQN_PIN_FLOW_SENSOR_A);
+  if (error1 != NO_ERROR) {
     Serial.print("Error changing sensor address: ");
-    errorToString(error, errorMessage, sizeof errorMessage);
+    errorToString(error1, errorMessage, sizeof errorMessage);
     Serial.println(errorMessage);
     return;
   }
@@ -890,60 +878,39 @@ void flowSensorSetUp() {
   // Change address of the first sensor
   // Set IRQN_PIN_SENSOR_B to the GPIO pin number where you connected Pin 1
   // of your second sensor.
-  error = changeSensorAddress(Wire, I2C_ADDR_FLOW_SENSOR_B, IRQN_PIN_FLOW_SENSOR_B);
-  if (error != NO_ERROR) {
+  error1 = changeSensorAddress(Wire1, I2C_ADDR_FLOW_SENSOR_B, IRQN_PIN_FLOW_SENSOR_B);
+  if (error1 != NO_ERROR) {
     Serial.print("Error changing sensor address: ");
-    errorToString(error, errorMessage, sizeof errorMessage);
+    errorToString(error1, errorMessage, sizeof errorMessage);
     Serial.println(errorMessage);
     return;
   }
 
-  // Change address of the first sensor
-  // Set IRQN_PIN_SENSOR_B to the GPIO pin number where you connected Pin 1
-  // of your third sensor.
-  error = changeSensorAddress(Wire, I2C_ADDR_FLOW_SENSOR_C, IRQN_PIN_FLOW_SENSOR_C);
-  if (error != NO_ERROR) {
-    Serial.print("Error changing sensor address: ");
-    errorToString(error, errorMessage, sizeof errorMessage);
-    Serial.println(errorMessage);
-    return;
-  }
 
   // Initialize first sensor
   Serial.println("Initialising flow sensor A");
-  flowSensorA.begin(Wire, 0x0A);
+  flowSensorA.begin(Wire1, 0x0A);
   //readAndPrintSerial(sensorA);
-  error = flowSensorA.startH2oContinuousMeasurement();
-  if (error != NO_ERROR) {
+  error1 = flowSensorA.startH2oContinuousMeasurement();
+  if (error1 != NO_ERROR) {
     Serial.print("Error trying to execute startH2oContinuousMeasurement() for sensor A: ");
-    errorToString(error, errorMessage, sizeof errorMessage);
+    errorToString(error1, errorMessage, sizeof errorMessage);
     Serial.println(errorMessage);
     return;
   }
 
   // Initialize second sensor
   Serial.println("Initialising flow sensor B");
-  flowSensorB.begin(Wire, 0x0B);
+  flowSensorB.begin(Wire1, 0x0B);
   //readAndPrintSerial(sensorB);
-  error = flowSensorB.startH2oContinuousMeasurement();
-  if (error != NO_ERROR) {
+  error1 = flowSensorB.startH2oContinuousMeasurement();
+  if (error1 != NO_ERROR) {
     Serial.print("Error trying to execute startH2oContinuousMeasurement() for sensor B: ");
-    errorToString(error, errorMessage, sizeof errorMessage);
+    errorToString(error1, errorMessage, sizeof errorMessage);
     Serial.println(errorMessage);
     return;
   }
 
-  // Initialize third sensor
-  Serial.println("Initialising flow sensor C");
-  flowSensorC.begin(Wire, 0x0C);
-  //readAndPrintSerial(sensorC);
-  error = flowSensorC.startH2oContinuousMeasurement();
-  if (error != NO_ERROR) {
-    Serial.print("Error trying to execute startH2oContinuousMeasurement() for sensor C: ");
-    errorToString(error, errorMessage, sizeof errorMessage);
-    Serial.println(errorMessage);
-    return;
-  }
 }
 
 
@@ -954,22 +921,22 @@ Parameters - none
 Return - none (function return type: void) 
 */
 void i2c_soft_reset() {
-  Wire.beginTransmission(0x00);
-  size_t writtenBytes = Wire.write(0x06);
-  uint8_t i2c_error = Wire.endTransmission();
+  Wire1.beginTransmission(0x00);
+  size_t writtenBytes = Wire1.write(0x06);
+  uint8_t i2c_error = Wire1.endTransmission();
 }
 
 
 /*
 IMPORTANT - this function was copied from the program "exampleI2cAddressChange.ino" under the examples from the "Sensirion I2C SF06-LF" library   
-changeSensorAddress(TwoWire& wire, uint16_t newI2cAddress, uint8_t sensorIrqPin)
+changeSensorAddress(TwoWire1& Wire1, uint16_t newI2cAddress, uint8_t sensorIrqPin)
 Parameters - 
-  TwoWire& wire
+  TwoWire& Wire1
   uint16_t newI2cAddress 
   uint8_t sensorIrqPin
 Return - NO_ERROR (function return type: int16_t) 
 */
-int16_t changeSensorAddress(TwoWire& wire, uint16_t newI2cAddress, uint8_t sensorIrqPin) {
+int16_t changeSensorAddress(TwoWire& Wire1, uint16_t newI2cAddress, uint8_t sensorIrqPin) {
   uint8_t communication_buffer[5] = { 0 };
   int16_t localError = NO_ERROR;
   uint8_t* buffer_ptr = communication_buffer;
@@ -979,7 +946,7 @@ int16_t changeSensorAddress(TwoWire& wire, uint16_t newI2cAddress, uint8_t senso
   SensirionI2CTxFrame txFrame = SensirionI2CTxFrame::createWithUInt16Command(0x3661, buffer_ptr, 5);
   txFrame.addUInt16(newI2cAddress);
   // Note that the command is sent to the default address 0x08 of the sensor
-  localError = SensirionI2CCommunication::sendFrame(SLF3C_1300F_I2C_ADDR_08, txFrame, wire);
+  localError = SensirionI2CCommunication::sendFrame(SLF3C_1300F_I2C_ADDR_08, txFrame, Wire1);
   if (localError != NO_ERROR) {
     Serial.println("error sending address change command");
     errorToString(localError, errorMessage, sizeof errorMessage);
@@ -1125,3 +1092,23 @@ void setupWiFiAP() {
   delay(1000);
 }
 
+void RTCset()  // Set cpu RTC
+{    
+  tm t;
+            t.tm_sec = (0);       // 0-59
+            t.tm_min = (0);        // 0-59
+            t.tm_hour = (0);         // 0-23
+            t.tm_mday = (1);   // 1-31
+            t.tm_mon = (0);       // 0-11  "0" = Jan, -1 
+            t.tm_year = ((22)+100+1900);   // year since 1900,  current year + 100 + 1900 = correct year
+            set_time(mktime(&t));       // set RTC clock       
+}
+
+String getLocaltime()
+{
+    char buffer[32];
+    tm t;
+    _rtc_localtime(time(NULL), &t, RTC_4_YEAR_LEAP_YEAR_SUPPORT);
+    strftime(buffer, 32, "%Y-%m-%d %k:%M:%S", &t);
+    return String(buffer);
+}
