@@ -1,5 +1,5 @@
 /*
-  TODO: add feature - adjust setpoint for waterblock and device via webpage 
+  TODO: add feature - adjust setpoint for waterblock (done) and device via webpage 
 */
 
 /*
@@ -15,15 +15,14 @@
 */
 
 /*
-  TODO: add feature - flow sensor failure 
-    1. our flow sensors output both flow rate and temp so if we get both temp and flow then the sensor works. if we dont then consider it faulty 
+  TODO: add feature - flow sensor failure - Done
+    1. our flow sensors output both flow rate and temp so if we get both temp and flow then the sensor works. if we dont then consider it faulty
+    Have it so that if both the flow rate and temp are the default 0.0, then set a variable to one. When the flow sensor detection happens, and if the variable is set to 0, it goes through, if 1, skip it
+    Do the same for both sensors
+    - Done, needs testing
+
 */
 
-
-/*
-  TODO: add feature - flow sensor failure 
-    1. our flow sensors output both flow rate and temp so if we get both temp and flow then the sensor works. if we 
-*/
 
 
 /*
@@ -31,9 +30,9 @@ Aberrant temp rejection code
 Setup with only sensors that are functioning
 
 Flow sensor fail = temp
-Flow < 5 mL temp > 41 degC
+Flow < 5 mL temp > 41 degC - Done
 
-Maxt 50 deg
+Maxt 50 deg - Done
 
 Dac output peltier (at 5v scale)
 
@@ -72,8 +71,10 @@ fix file naming issue - mahabad
 //Define global variables for webdashboard and .h files
 float WBTemp_atm;
 float braintemp_atm;
-float aFlow;
-float bFlow;
+float aFlow = 0.0;
+float bFlow = 0.0;
+float aTemperature = 0.0;
+float bTemperature = 0.0;
 float pumpVoltage;
 float pumpCurrent;
 float peltierVoltage;
@@ -82,6 +83,8 @@ float pressureApplied1;
 float pressureApplied2;
 float pressureApplied3;
 float pressureApplied4;
+int aFlow_bad;
+int bFlow_bad;
 
 // Define the flow sensor objects
 SensirionI2cSf06Lf flowSensorA;
@@ -278,14 +281,15 @@ void setup() {
   //currentSensorSetUp();
   if (!pumpINA260.begin(pumpI2CAddress)) {
     Serial.println("Couldn't find pump current sensor");
-    while (1);
+    myFile.println("Pump INA not found");
   }
   Serial.println("Found pump current sensor");
 
   if (!peltierINA260.begin(peltierI2CAddress)) {
     Serial.println("Couldn't find peltier current sensor");
-    while (1);
+    myFile.println("Peltier INA not found");
   }
+
   Serial.println("Found peltier current sensor");
   Serial.println();
 
@@ -306,7 +310,7 @@ void setup() {
   //Initializing SD Card
   if (!SD.begin(10)) {
     Serial.println("initialization failed!");
-    while (1);
+    myFile.println("SD card not found");
   }
   Serial.println("initialization done.");
 
@@ -659,6 +663,7 @@ void loop() {
   float steinhartExitBWB1 = 1 / ((log(avgExitBWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
   float steinhartExitBWB2 = 1 / ((log(avgExitBWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
   float steinhartExitBWB3 = 1 / ((log(avgExitBWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  
   //Average multiple temp sensors into 1 temperature
   float IntraArrayTemp = (steinhartIntraArray1 + steinhartIntraArray2 + steinhartIntraArray3 + steinhartIntraArray4) / 4;
   float ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
@@ -728,21 +733,58 @@ void loop() {
     updateErrorStatus("ERROR: Water Pump Overvolting");
   }
   //Flow Rate Sensor Detection
-  float aTemperature = 0.0;
+  
   uint16_t aSignalingFlags = 0u;
   flowSensorA.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, aFlow, aTemperature, aSignalingFlags);
-  float bTemperature = 0.0;
   uint16_t bSignalingFlags = 0u;
   flowSensorB.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3S_4000B, bFlow, bTemperature, bSignalingFlags);
 
-  //Sudden Flow Rate Drop Detection
-  if ((aFlow == 0 || bFlow == 0) && WBTemp_atm >= WBTempMax) {
-    digitalWrite(pumpRelay, HIGH);
-    analogWrite(DACPIN, 255);
-    digitalWrite(peltierRelay, HIGH);
+  //Rejection of Bad Flow Sensor
+  if (aFlow == 0.0 && aTemperature == 0.0){
+    aFlow_bad = 1;
+    Serial.println("Flow Sensor A Bad");
+  }
+  else {aFlow_bad = 0;}
+  if (bFlow == 0.0 && bTemperature == 0.0){
+    bFlow_bad = 1;
+    Serial.println("Flow Sensor B Bad");
+  }
+  else {bFlow_bad = 0;}
 
-    Serial.println("ERROR: No Flow Detected");
-    updateErrorStatus("ERROR: No Flow Detected");
+  //Sudden Flow Rate Drop Detection
+  if (aFlow_bad == 0 && bFlow_bad == 0){
+    if ((aFlow == 5 || bFlow == 5) && WBTemp_atm >= WBTempMax) {
+      digitalWrite(pumpRelay, HIGH);
+      analogWrite(DACPIN, 255);
+      digitalWrite(peltierRelay, HIGH);
+
+      Serial.println("ERROR: No Flow Detected");
+      updateErrorStatus("ERROR: No Flow Detected");
+    }
+  }
+  else if (aFlow_bad == 1 && bFlow_bad == 0){
+    if (bFlow == 5 && WBTemp_atm >= WBTempMax) {
+      digitalWrite(pumpRelay, HIGH);
+      analogWrite(DACPIN, 255);
+      digitalWrite(peltierRelay, HIGH);
+
+      Serial.println("ERROR: No Flow Detected");
+      updateErrorStatus("ERROR: No Flow Detected");
+    }
+  }
+  else if (aFlow_bad == 0 && bFlow_bad == 1){
+    if (aFlow == 5 && WBTemp_atm >= WBTempMax) {
+      digitalWrite(pumpRelay, HIGH);
+      analogWrite(DACPIN, 255);
+      digitalWrite(peltierRelay, HIGH);
+
+      Serial.println("ERROR: No Flow Detected");
+      updateErrorStatus("ERROR: No Flow Detected");
+    }
+  }
+  else if (aFlow_bad == 1 && bFlow_bad == 1){
+    Serial.println("ERROR: Bad Flow Sensors");
+    myFile.println("No good flow sensors");
   }
 
   //Detecting Pressure Values
@@ -774,7 +816,7 @@ void loop() {
   }
 
   //Water block temp 6 degrees above baseline and max flow rate --> Countdown for 3 minutes activates
-  if (WBTemp_atm >= WBTempMax && freq == 60) {
+  if (WBTemp_atm >= 41 && freq == 60) {
     startTime = startTime;  //If maxxing out, keep the starttime of the max the same
   } else {
     int newTime = millis();  //If normal operations, update startime with current time
