@@ -18,7 +18,7 @@ extern float WBTemp_atm, braintemp_atm;
 extern float aFlow, bFlow;
 extern float pumpVoltage, pumpCurrent;
 extern float peltierVoltage, peltierCurrent;
-extern float pressureApplied1, pressureApplied2, pressureApplied3, pressureApplied4;
+extern float pressureApplied1, pressureApplied2;
 
 // Web dashboard error handling
 void updateErrorStatus(String errorMessage) {
@@ -87,10 +87,6 @@ void handleWebRequests(WiFiServer& server) {
       client.print(pressureApplied1);
       client.print(",");
       client.print(pressureApplied2);
-      client.print(",");
-      client.print(pressureApplied3);
-      client.print(",");
-      client.print(pressureApplied4);
       client.stop();
       return;
     }
@@ -213,8 +209,6 @@ void handleWebRequests(WiFiServer& server) {
     client.println("<p>Peltier Current: <span id='peltierCurrentValue'>0.0</span></p>");
     client.println("<p>Pressure Applied 1: <span id='pressure1Value'>0.0</span></p>");
     client.println("<p>Pressure Applied 2: <span id='pressure2Value'>0.0</span></p>");
-    client.println("<p>Pressure Applied 3: <span id='pressure3Value'>0.0</span></p>");
-    client.println("<p>Pressure Applied 4: <span id='pressure4Value'>0.0</span></p>");
 
     // Canvas for charts
     client.println("<canvas id='proportionalChart' style='width: 200px; height: 100px;'></canvas>");
@@ -243,8 +237,6 @@ void handleWebRequests(WiFiServer& server) {
     client.println("let dataPeltierCurrent = [];");
     client.println("let dataPressure1 = [];");
     client.println("let dataPressure2 = [];");
-    client.println("let dataPressure3 = [];");
-    client.println("let dataPressure4 = [];");
     client.println("let labels = [];");
     client.println("let time = 0;");
 
@@ -385,15 +377,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("        borderColor: 'brown',");
     client.println("        fill: false");
     client.println("      }, {");
-    client.println("        label: 'Pressure Applied 3',");
-    client.println("        data: dataPressure3,");
-    client.println("        borderColor: 'pink',");
-    client.println("        fill: false");
     client.println("      }, {");
-    client.println("        label: 'Pressure Applied 4',");
-    client.println("        data: dataPressure4,");
-    client.println("        borderColor: 'cyan',");
-    client.println("        fill: false");
     client.println("      }]");
     client.println("    },");
     client.println("    options: {");
@@ -427,8 +411,6 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      let peltierCurrent = parseFloat(values[12]);");
     client.println("      let pressure1 = parseFloat(values[13]);");
     client.println("      let pressure2 = parseFloat(values[14]);");
-    client.println("      let pressure3 = parseFloat(values[15]);");
-    client.println("      let pressure4 = parseFloat(values[16]);");
 
     // Update the display
     client.println("      document.getElementById('proportionalValue').innerText = Kp_peltier;");
@@ -446,8 +428,6 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      document.getElementById('peltierCurrentValue').innerText = peltierCurrent.toFixed(1);");
     client.println("      document.getElementById('pressure1Value').innerText = pressure1.toFixed(1);");
     client.println("      document.getElementById('pressure2Value').innerText = pressure2.toFixed(1);");
-    client.println("      document.getElementById('pressure3Value').innerText = pressure3.toFixed(1);");
-    client.println("      document.getElementById('pressure4Value').innerText = pressure4.toFixed(1);");
 
     // Push data to arrays
     client.println("      dataProportional.push(Kp_peltier);");
@@ -465,8 +445,6 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      dataPeltierCurrent.push(peltierCurrent);");
     client.println("      dataPressure1.push(pressure1);");
     client.println("      dataPressure2.push(pressure2);");
-    client.println("      dataPressure3.push(pressure3);");
-    client.println("      dataPressure4.push(pressure4);");
     client.println("      labels.push(time++);");
 
     // Limit data to 100 points
@@ -485,8 +463,6 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      if (dataPeltierCurrent.length > 100) { dataPeltierCurrent.shift(); }");
     client.println("      if (dataPressure1.length > 100) { dataPressure1.shift(); }");
     client.println("      if (dataPressure2.length > 100) { dataPressure2.shift(); }");
-    client.println("      if (dataPressure3.length > 100) { dataPressure3.shift(); }");
-    client.println("      if (dataPressure4.length > 100) { dataPressure4.shift(); }");
     client.println("      if (labels.length > 100) { labels.shift(); }");
 
     // Update all charts

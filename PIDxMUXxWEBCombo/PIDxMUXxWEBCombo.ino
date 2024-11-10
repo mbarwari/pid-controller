@@ -28,25 +28,9 @@
 /*
 Aberrant temp rejection code
 Setup with only sensors that are functioning
-
-Flow sensor fail = temp
-Flow < 5 mL temp > 41 degC - Done
-
-Maxt 50 deg - Done
-
 Dac output peltier (at 5v scale)
 
 */
-
-
-/*
-done 
-+Update water pump set point (display serial as well)
-
-+Frequency output
-
-*/
-
 
 /*
 fix file naming issue - mahabad 
@@ -81,8 +65,6 @@ float peltierVoltage;
 float peltierCurrent;
 float pressureApplied1;
 float pressureApplied2;
-float pressureApplied3;
-float pressureApplied4;
 int aFlow_bad;
 int bFlow_bad;
 
@@ -117,7 +99,7 @@ File myFile;  //Initialization of SD card reader
 int decimalPlaces = 3;
 
 // WIFI related global variables, macros, and object
-#define SECRET_SSID "pigTrial"
+#define SECRET_SSID "test1"
 #define SECRET_PASS "123456789"
 char ssid[] = SECRET_SSID;  // your network SSID (name)
 char pass[] = SECRET_PASS;  // your network password (use for WPA, or use as key for WEP)
@@ -216,10 +198,7 @@ String log_filename = "";
 //Forward declarations
 void setupWiFiAP();
 int setMux(int mux, int channel);
-void RTCset();
 String getLocaltime();
-
-
 
 
 void setup() {
@@ -257,15 +236,6 @@ void setup() {
   digitalWrite(mux2S2, LOW);
   digitalWrite(mux2S3, LOW);
 
-
-  //Setting up RTC for Data Time Saving. Adjust to date of implantation
-  RTCset();
-  Serial.print("Date/Time: ");
-  Serial.println();
-  Serial.println();
-
-  
-
   //Setting up I2C Devices
   Serial.println("I2C setup: ");
 
@@ -278,18 +248,16 @@ void setup() {
   flowSensorB.startH2oContinuousMeasurement();
 
   //Starting up Current and Voltage Sensors
-  //currentSensorSetUp();
-  if (!pumpINA260.begin(pumpI2CAddress)) {
+  if (!pumpINA260.begin(pumpI2CAddress, &Wire1)) {
     Serial.println("Couldn't find pump current sensor");
     myFile.println("Pump INA not found");
   }
   Serial.println("Found pump current sensor");
 
-  if (!peltierINA260.begin(peltierI2CAddress)) {
+  if (!peltierINA260.begin(peltierI2CAddress, &Wire1)) {
     Serial.println("Couldn't find peltier current sensor");
     myFile.println("Peltier INA not found");
   }
-
   Serial.println("Found peltier current sensor");
   Serial.println();
 
@@ -299,10 +267,6 @@ void setup() {
 
   // set up the WiFi Access Point
   setupWiFiAP();
-
-  // start the WiFi server
-  // the server will listen for incoming connections on port 80 (the default port for HTTP)
-  //server.begin();
 
   //Set up Web interface
   setupWebDashboard(server);  // Use the existing server object
@@ -314,8 +278,6 @@ void setup() {
   }
   Serial.println("initialization done.");
 
-  
-
   data_filename += getLocaltime();
   data_filename += "_DATA.txt";
 
@@ -324,7 +286,7 @@ void setup() {
 
 
   //Opening the file we want to save in
-  myFile = SD.open(data_filename, FILE_WRITE);  //Change file name here
+  myFile = SD.open("testing.txt", FILE_WRITE);  //Change file name here
   //The line below establishes column headers for save file. Always seperate with comma when adding new ones*/
   myFile.println("Time,IntraArray1 (C),IntraArray2 (C),IntraArray3 (C),IntraArray4 (C),ExtraArray1 (C),ExtraArray2 (C),ExtraArray3 (C),ScalpWB1 (C),ScalpWB2 (C),ScalpWB3 (C),EntrSWB1 (C),EntrSWB2 (C),EntrSWB3 (C),ExitSWB1 (C),ExitSWB2 (C),ExitSWB3 (C),EntrBWB1 (C),EntrBWB2 (C),EntrBWB3 (C),BWB1 (C),BWB2 (C),BWB3 (C),BWB4 (C),BWB5 (C),BWB6 (C),ExitBWB1 (C),ExitBWB2 (C),ExitBWB3 (C),Peltier Current (A),Peltier Voltage (V),Pump Current (A),Pump Voltage (V),Flow Sensor 1 (mL/min),Flow Sensor 2 (mL/min),Pressure1 (psi),Pressure2 (psi),Pressure3 (psi),Pressure4 (psi),P,I,D,SetpointPeltier Temp,WiFI Client Status (0 = USB, 1 = WiFi)");
   myFile.close();
@@ -347,8 +309,6 @@ void setup() {
 
   //Initializing DAC
   pinMode(DACPIN, OUTPUT);
-
-  //Serial.print("1");
 }
 
 
@@ -364,9 +324,11 @@ void loop() {
     if (status == WL_AP_CONNECTED) {
       // a device has connected to the AP
       Serial.println("Device connected to AP");
+      myFile.println("Device connected to AP");
     } else {
       // a device has disconnected from the AP, and we are back in listening mode
       Serial.println("Device disconnected from AP");
+      myFile.println("Device disconnected from AP");
     }
   }
 
@@ -376,7 +338,8 @@ void loop() {
   if (client) {
     // if you get a client, set clientStatus to 1, if not, set clientStatus to 0
     clientStatus = 1;
-  } else {
+  } 
+  else {
     clientStatus = 0;
   }
 
@@ -410,6 +373,7 @@ void loop() {
     int SWB3 = setMux(1, 2);
     samples10[i] = analogRead(SWB3);
 
+    /*
     //Scalp Water Block Entrance (entrSWB) Temperatures
     int entrSWB1 = setMux(2, 0);
     samples11[i] = analogRead(entrSWB1);
@@ -425,27 +389,28 @@ void loop() {
     samples15[i] = analogRead(exitSWB2);
     int exitSWB3 = setMux(2, 5);
     samples16[i] = analogRead(exitSWB3);
+    */
 
     //Body Water Block Entrance (entrBWB) Temperatures
-    int entrBWB1 = setMux(2, 6);
+    int entrBWB1 = setMux(2, 0);
     samples17[i] = analogRead(entrBWB1);
-    int entrBWB2 = setMux(2, 7);
+    int entrBWB2 = setMux(2, 1);
     samples18[i] = analogRead(entrBWB2);
-    int entrBWB3 = setMux(2, 8);
+    int entrBWB3 = setMux(2, 2);
     samples19[i] = analogRead(entrBWB3);
 
     //Body Water Block (BWB) Temperatures
-    int BWB1 = setMux(1, 10);
+    int BWB1 = setMux(2, 3);
     samples20[i] = analogRead(BWB1);
-    int BWB2 = setMux(1, 11);
+    int BWB2 = setMux(2, 4);
     samples21[i] = analogRead(BWB2);
-    int BWB3 = setMux(1, 12);
+    int BWB3 = setMux(2, 5);
     samples22[i] = analogRead(BWB3);
-    int BWB4 = setMux(1, 13);
+    int BWB4 = setMux(2, 6);
     samples23[i] = analogRead(BWB4);
-    int BWB5 = setMux(1, 14);
+    int BWB5 = setMux(2, 7);
     samples24[i] = analogRead(BWB5);
-    int BWB6 = setMux(1, 15);
+    int BWB6 = setMux(2, 8);
     samples25[i] = analogRead(BWB6);
 
     //Body Water Block Exit (exitBWB) Temperatures
@@ -457,15 +422,16 @@ void loop() {
     samples28[i] = analogRead(exitBWB3);
 
     //Pressure Sensors
-    int pressureSensor1 = setMux(2, 12);
-    samples29[i] = analogRead(pressureSensor1);
-    int pressureSensor2 = setMux(2, 13);
+    int pressureSensor1 = setMux(2, 14);
+    samples29[i] = analogRead(pressureSensor1); 
+    int pressureSensor2 = setMux(2, 15);
     samples30[i] = analogRead(pressureSensor2);
+    /*
     int pressureSensor3 = setMux(2, 14);
     samples31[i] = analogRead(pressureSensor3);
     int pressureSensor4 = setMux(2, 15);
     samples32[i] = analogRead(pressureSensor4);
-
+    */
     delay(10);
   }
 
@@ -500,8 +466,6 @@ void loop() {
   float avgExitBWB3;
   float avgPressureSensor1;
   float avgPressureSensor2;
-  float avgPressureSensor3;
-  float avgPressureSensor4;
 
   avgIntraArray1 = 0;
   avgIntraArray2 = 0;
@@ -533,8 +497,6 @@ void loop() {
   avgExitBWB3 = 0;
   avgPressureSensor1 = 0;
   avgPressureSensor2 = 0;
-  avgPressureSensor3 = 0;
-  avgPressureSensor4 = 0;
 
   for (i = 0; i < NUMSAMPLES; i++) {
     avgIntraArray1 += samples1[i];
@@ -567,8 +529,6 @@ void loop() {
     avgExitBWB3 += samples28[i];
     avgPressureSensor1 += samples29[i];
     avgPressureSensor2 += samples30[i];
-    avgPressureSensor3 += samples31[i];
-    avgPressureSensor4 += samples32[i];
   }
 
   avgIntraArray1 = avgIntraArray1 / NUMSAMPLES;
@@ -601,8 +561,6 @@ void loop() {
   avgExitBWB3 = avgExitBWB3 / NUMSAMPLES;
   avgPressureSensor1 = avgPressureSensor1 / NUMSAMPLES;
   avgPressureSensor2 = avgPressureSensor2 / NUMSAMPLES;
-  avgPressureSensor3 = avgPressureSensor3 / NUMSAMPLES;
-  avgPressureSensor4 = avgPressureSensor4 / NUMSAMPLES;
 
   //Converting temp sensors data into actual degrees (Celsius)
   //First convert to a resistance value
@@ -710,7 +668,12 @@ void loop() {
   //Peltier Overcurrent and Overvoltage Protection
   peltierCurrent = peltierINA260.readCurrent() / 1000;
   peltierVoltage = peltierINA260.readBusVoltage() / 1000;
-  //Turn on Power to peltier if too high
+  pumpCurrent = pumpINA260.readCurrent() / 1000;
+  pumpVoltage = pumpINA260.readBusVoltage() / 1000;
+  //Turn off Power to peltier if too high
+
+
+/*
   if (peltierCurrent >= 2 || peltierVoltage >= 8) {
     analogWrite(DACPIN, 255);
     digitalWrite(peltierRelay, LOW);
@@ -719,11 +682,8 @@ void loop() {
     updateErrorStatus("ERROR: Peltier Overcurrenting/volting");
   }
 
+
   //Pump Overcurrent and Overvoltage Protection
-  //float pumpCurrent;
-  pumpCurrent = pumpINA260.readCurrent() / 1000;
-  //float pumpVoltage;
-  pumpVoltage = pumpINA260.readBusVoltage() / 1000;
   //Turn off Power to pump if too high
   if (pumpVoltage >= 6.1) {
     digitalWrite(pumpRelay, HIGH);
@@ -732,6 +692,9 @@ void loop() {
     Serial.println("ERROR: Water Pump Overvolting");
     updateErrorStatus("ERROR: Water Pump Overvolting");
   }
+*/
+
+
   //Flow Rate Sensor Detection
   
   uint16_t aSignalingFlags = 0u;
@@ -744,16 +707,21 @@ void loop() {
     aFlow_bad = 1;
     Serial.println("Flow Sensor A Bad");
   }
-  else {aFlow_bad = 0;}
+  else {
+    aFlow_bad = 0;
+  }
+
   if (bFlow == 0.0 && bTemperature == 0.0){
     bFlow_bad = 1;
     Serial.println("Flow Sensor B Bad");
   }
-  else {bFlow_bad = 0;}
+  else {
+    bFlow_bad = 0;
+  }
 
   //Sudden Flow Rate Drop Detection
   if (aFlow_bad == 0 && bFlow_bad == 0){
-    if ((aFlow == 5 || bFlow == 5) && WBTemp_atm >= WBTempMax) {
+    if ((aFlow <= 5 || bFlow <= 5) && WBTemp_atm >= WBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -763,7 +731,7 @@ void loop() {
     }
   }
   else if (aFlow_bad == 1 && bFlow_bad == 0){
-    if (bFlow == 5 && WBTemp_atm >= WBTempMax) {
+    if (bFlow <= 5 && WBTemp_atm >= WBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -773,7 +741,7 @@ void loop() {
     }
   }
   else if (aFlow_bad == 0 && bFlow_bad == 1){
-    if (aFlow == 5 && WBTemp_atm >= WBTempMax) {
+    if (aFlow <= 5 && WBTemp_atm >= WBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -791,29 +759,25 @@ void loop() {
   //Converting from input to voltage (conversion from spec sheet)
   float pressureSensor1Volt = avgPressureSensor1 * (vSupply / 1023.0);
   float pressureSensor2Volt = avgPressureSensor2 * (vSupply / 1023.0);
-  float pressureSensor3Volt = avgPressureSensor3 * (vSupply / 1023.0);
-  float pressureSensor4Volt = avgPressureSensor4 * (vSupply / 1023.0);
 
   //Converting Voltage to pressure (conversion from spec sheet)
-  pressureApplied1 = (15 / (0.8 * vSupply)) * (pressureSensor1Volt - 0.1 * vSupply) + 0;
-  pressureApplied2 = (15 / (0.8 * vSupply)) * (pressureSensor2Volt - 0.1 * vSupply) + 0;
-  pressureApplied3 = (15 / (0.8 * vSupply)) * (pressureSensor3Volt - 0.1 * vSupply) + 0;
-  pressureApplied4 = (15 / (0.8 * vSupply)) * (pressureSensor4Volt - 0.1 * vSupply) + 0;
+  pressureApplied1 = (15 / (0.8 * vSupply)) * (pressureSensor1Volt - 0.1 * vSupply);
+  pressureApplied2 = (15 / (0.8 * vSupply)) * (pressureSensor2Volt - 0.1 * vSupply);
 
   //Turn off system if abnormal pressure
   float lowPressure = 0;
   float highPressure = 5;
-  if (pressureApplied1 > highPressure || pressureApplied2 > highPressure || pressureApplied3 > highPressure || pressureApplied4 > highPressure) {
+
+  /*
+  if (pressureApplied1 > highPressure || pressureApplied2 > highPressure) {
     analogWrite(DACPIN, 255);  //DACPIN 0 means completely on, 255 means off
     digitalWrite(pumpRelay, HIGH);
     digitalWrite(peltierRelay, HIGH);
 
     Serial.print("ERROR: Aberrant Pressure Levels");
-    Serial.println(pressureApplied1);
-
     updateErrorStatus("ERROR: Aberrant Pressure Levels");
-    //client.println(pressureApplied1);
   }
+  */
 
   //Water block temp 6 degrees above baseline and max flow rate --> Countdown for 3 minutes activates
   if (WBTemp_atm >= 41 && freq == 60) {
@@ -862,7 +826,7 @@ void loop() {
 
 
   //Save Data to SD Card
-  myFile = SD.open(data_filename, FILE_WRITE);  //Opening the file here
+  myFile = SD.open("testing.txt", FILE_WRITE);  //Opening the file here
 
   myFile.print(getLocaltime());
   myFile.print(",");
@@ -937,10 +901,6 @@ void loop() {
   myFile.print(pressureApplied1);
   myFile.print(",");
   myFile.print(pressureApplied2);
-  myFile.print(",");
-  myFile.print(pressureApplied3);
-  myFile.print(",");
-  myFile.print(pressureApplied4);
   myFile.print(",");
   myFile.print(Kp_peltier);
   myFile.print(",");
@@ -1048,11 +1008,12 @@ void loop() {
   Serial.print("Pressure Sensors:");
   Serial.print(pressureApplied1);
   Serial.print(",");
-  Serial.print(pressureApplied2);
+  Serial.println(pressureApplied2);
+
+  Serial.print("Pressure Voltage:");
+  Serial.print(pressureSensor1Volt);
   Serial.print(",");
-  Serial.print(pressureApplied3);
-  Serial.print(",");
-  Serial.println(pressureApplied4);
+  Serial.println(pressureSensor2Volt);
 
   Serial.print("PID values:");
   Serial.print(Kp_peltier);
@@ -1065,7 +1026,6 @@ void loop() {
 
   Serial.print("Client Status:");
   Serial.println(clientStatus);
-
 
   /*//Sending Data to Client
   
@@ -1114,7 +1074,6 @@ void loop() {
       client.print(pressureApplied1, decimalPlaces);
       client.println("psi");
         client.print("\t");*/
-
   delay(1000);
 }
 
@@ -1123,17 +1082,6 @@ void loop() {
 
 /* ---------------------------- FUNCTIONS ---------------------------- */
 
-void RTCset()  // Set cpu RTC
-{
-  tm t;
-  t.tm_sec = (0);                   // 0-59
-  t.tm_min = (4);                  // 0-59
-  t.tm_hour = (21);                 // 0-23
-  t.tm_mday = (6);                 // 1-31
-  t.tm_mon = (10);                   // 0-11  "0" = Jan, -1
-  t.tm_year = ((24) + 100);  // year since 1900,  current year + 100 + 1900 = correct year
-  set_time(mktime(&t));             // set RTC clock
-}
 
 String getLocaltime() {
   char buffer[32];
@@ -1143,29 +1091,6 @@ String getLocaltime() {
   return String(buffer);
 }
 
-/*
-currentSensorSetUp() -  
-Parameters - none
-Return - none (function return type: void) 
-*/
-void currentSensorSetUp() {
-
-  if (!pumpINA260.begin(pumpI2CAddress)) {
-    Serial.println("Couldn't find pump current sensor");
-    while (1)
-      ;
-  }
-  Serial.println("Found pump current sensor");
-
-
-  if (!peltierINA260.begin(peltierI2CAddress)) {
-    Serial.println("Couldn't find peltier current sensor");
-    while (1)
-      ;
-  }
-  Serial.println("Found peltier current sensor");
-  Serial.println();
-}
 
 /*
 setMux(int mux, int channel) - sets the MUX channel based off the parameters  
@@ -1218,7 +1143,7 @@ int setMux(int mux, int channel) {
   };
 
   // loop through the 4 SIG
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) {                                                                                   
     digitalWrite(controlPin[i], muxChannel[channel][i]);
   }
 
