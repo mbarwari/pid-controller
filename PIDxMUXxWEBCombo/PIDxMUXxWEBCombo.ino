@@ -1,42 +1,3 @@
-/*
-  TODO: add feature - adjust setpoint for waterblock (done) and device via webpage 
-*/
-
-/*
-  TODO: add feature - output daq voltage and pwm feq   
-*/
-
-/*
-  TODO: add feature - temp rejection 
-    1. Setup with only sensors that are functioning
-    2. check each iteration of the temp readings with the last iteration to check if there is a large difference. 
-       if there is a large difference then that specific temp sensor should be considered faulty. include that in log file and then do not displauy that specific sensor(s)
-    3. make sure this is noted in our log.txt file 
-*/
-
-/*
-  TODO: add feature - flow sensor failure - Done
-    1. our flow sensors output both flow rate and temp so if we get both temp and flow then the sensor works. if we dont then consider it faulty
-    Have it so that if both the flow rate and temp are the default 0.0, then set a variable to one. When the flow sensor detection happens, and if the variable is set to 0, it goes through, if 1, skip it
-    Do the same for both sensors
-    - Done, needs testing
-
-*/
-
-
-
-/*
-Aberrant temp rejection code
-Setup with only sensors that are functioning
-Dac output peltier (at 5v scale)
-
-*/
-
-/*
-fix file naming issue - mahabad 
-*/
-
-
 // include necessary libraries
 #include <Wire.h>
 #include <WiFi.h>
@@ -67,6 +28,8 @@ float pressureApplied1;
 float pressureApplied2;
 int aFlow_bad;
 int bFlow_bad;
+float previousFreq = 0.0;          // Previous frequency to track changes
+float dacVoltage;         // Variable to store the calculated DAC output voltage
 
 // Define the flow sensor objects
 SensirionI2cSf06Lf flowSensorA;
@@ -94,12 +57,15 @@ unsigned long waqt;
 int tempCount, pressureCount, flowCount, currentCount, noneCount;
 const int sampleSize = 10;  // Sample size
 const int NUMSAMPLES = 10;
-File myFile;  //Initialization of SD card reader
-#define DACPIN A12
 int decimalPlaces = 3;
+File dataFile;  //Initialization of SD card reader
+File logFile;  //Initialization of SD card reader
+#define DACPIN A12
+int dacValue = 0;       // Set a value from 0 to 255 for DAC output (128 is roughly half of 3.3V)
+
 
 // WIFI related global variables, macros, and object
-#define SECRET_SSID "test1"
+#define SECRET_SSID "pigTrial"
 #define SECRET_PASS "123456789"
 char ssid[] = SECRET_SSID;  // your network SSID (name)
 char pass[] = SECRET_PASS;  // your network password (use for WPA, or use as key for WEP)
@@ -185,15 +151,10 @@ int startTime = 0;
 //PWM Frequency Generator Variables
 float myfreq;                      // Desired frequency
 float desperiod;                   // Desired period in seconds
-float previousFreq = 0.0;          // Previous frequency to track changes
 const float freqThreshold = 10.0;  // Frequency change threshold and interval (e.g., 10 Hz)
 const float hysteresis = 5.0;      // Hysteresis margin (e.g., 5 Hz to prevent frequent toggling)
 PinName pin = digitalPinToPinName(D11); //This is for the water block controller. Can be any digital pin, make changes to correct pin here
 mbed::PwmOut* pwm = new mbed::PwmOut(pin);
-
-//File variables 
-String data_filename = "";
-String log_filename = "";
 
 //Forward declarations
 void setupWiFiAP();
@@ -250,15 +211,17 @@ void setup() {
   //Starting up Current and Voltage Sensors
   if (!pumpINA260.begin(pumpI2CAddress, &Wire1)) {
     Serial.println("Couldn't find pump current sensor");
-    myFile.println("Pump INA not found");
   }
-  Serial.println("Found pump current sensor");
-
+  else{
+    Serial.println("Found pump current sensor");
+  }
+  
   if (!peltierINA260.begin(peltierI2CAddress, &Wire1)) {
     Serial.println("Couldn't find peltier current sensor");
-    myFile.println("Peltier INA not found");
   }
-  Serial.println("Found peltier current sensor");
+  else{
+    Serial.println("Found peltier current sensor");
+  }
   Serial.println();
 
 
@@ -274,22 +237,23 @@ void setup() {
   //Initializing SD Card
   if (!SD.begin(10)) {
     Serial.println("initialization failed!");
-    myFile.println("SD card not found");
   }
-  Serial.println("initialization done.");
-
-  data_filename += getLocaltime();
-  data_filename += "_DATA.txt";
-
-  log_filename += getLocaltime();
-  log_filename += "_LOG.txt";
-
+  else{
+    Serial.println("initialization done.");
+  }
 
   //Opening the file we want to save in
-  myFile = SD.open("testing.txt", FILE_WRITE);  //Change file name here
+  dataFile = SD.open("data.txt", FILE_WRITE);  //Change file name here
   //The line below establishes column headers for save file. Always seperate with comma when adding new ones*/
-  myFile.println("Time,IntraArray1 (C),IntraArray2 (C),IntraArray3 (C),IntraArray4 (C),ExtraArray1 (C),ExtraArray2 (C),ExtraArray3 (C),ScalpWB1 (C),ScalpWB2 (C),ScalpWB3 (C),EntrSWB1 (C),EntrSWB2 (C),EntrSWB3 (C),ExitSWB1 (C),ExitSWB2 (C),ExitSWB3 (C),EntrBWB1 (C),EntrBWB2 (C),EntrBWB3 (C),BWB1 (C),BWB2 (C),BWB3 (C),BWB4 (C),BWB5 (C),BWB6 (C),ExitBWB1 (C),ExitBWB2 (C),ExitBWB3 (C),Peltier Current (A),Peltier Voltage (V),Pump Current (A),Pump Voltage (V),Flow Sensor 1 (mL/min),Flow Sensor 2 (mL/min),Pressure1 (psi),Pressure2 (psi),Pressure3 (psi),Pressure4 (psi),P,I,D,SetpointPeltier Temp,WiFI Client Status (0 = USB, 1 = WiFi)");
-  myFile.close();
+  dataFile.println("Time,IntraArray1 (C),IntraArray2 (C),IntraArray3 (C),IntraArray4 (C),ExtraArray1 (C),ExtraArray2 (C),ExtraArray3 (C),ScalpWB1 (C),ScalpWB2 (C),ScalpWB3 (C),EntrBWB1 (C),EntrBWB2 (C),EntrBWB3 (C),BWB1 (C),BWB2 (C),BWB3 (C),BWB4 (C),BWB5 (C),BWB6 (C),ExitBWB1 (C),ExitBWB2 (C),ExitBWB3 (C),Peltier Current (A),Peltier Voltage (V),Pump Current (A),Pump Voltage (V),Flow Sensor 1 (mL/min),Flow Sensor 2 (mL/min),Pressure1 (psi),Pressure2 (psi),P,I,D,SetpointPeltier Temp,WiFI Client Status (0 = USB, 1 = WiFi), previousFreq, dacVoltage");
+  dataFile.close();
+
+  //Opening the file we want to save in
+  logFile = SD.open("log.txt", FILE_WRITE);  //Change file name here
+  logFile.println("Log File");
+  logFile.print("Date/Time: ");
+  logFile.println(getLocaltime());
+  logFile.close();
 
   //Turning on Power to Pump and Peltier
   pinMode(peltierRelay, OUTPUT);
@@ -324,11 +288,23 @@ void loop() {
     if (status == WL_AP_CONNECTED) {
       // a device has connected to the AP
       Serial.println("Device connected to AP");
-      myFile.println("Device connected to AP");
+
+      logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+      logFile.print("Date/Time: ");
+      logFile.print(getLocaltime());
+      logFile.print(",");
+      logFile.println("Device connected to AP");
+      logFile.close();
     } else {
       // a device has disconnected from the AP, and we are back in listening mode
       Serial.println("Device disconnected from AP");
-      myFile.println("Device disconnected from AP");
+
+      logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+      logFile.print("Date/Time: ");
+      logFile.print(getLocaltime());
+      logFile.print(",");
+      logFile.println("Device disconnected from AP");
+      logFile.close();
     }
   }
 
@@ -373,24 +349,6 @@ void loop() {
     int SWB3 = setMux(1, 2);
     samples10[i] = analogRead(SWB3);
 
-    /*
-    //Scalp Water Block Entrance (entrSWB) Temperatures
-    int entrSWB1 = setMux(2, 0);
-    samples11[i] = analogRead(entrSWB1);
-    int entrSWB2 = setMux(2, 1);
-    samples12[i] = analogRead(entrSWB2);
-    int entrSWB3 = setMux(2, 2);
-    samples13[i] = analogRead(entrSWB3);
-
-    //Scalp Water Block Exit (exitSWB) Temperatures
-    int exitSWB1 = setMux(2, 3);
-    samples14[i] = analogRead(exitSWB1);
-    int exitSWB2 = setMux(2, 4);
-    samples15[i] = analogRead(exitSWB2);
-    int exitSWB3 = setMux(2, 5);
-    samples16[i] = analogRead(exitSWB3);
-    */
-
     //Body Water Block Entrance (entrBWB) Temperatures
     int entrBWB1 = setMux(2, 0);
     samples17[i] = analogRead(entrBWB1);
@@ -426,12 +384,6 @@ void loop() {
     samples29[i] = analogRead(pressureSensor1); 
     int pressureSensor2 = setMux(2, 15);
     samples30[i] = analogRead(pressureSensor2);
-    /*
-    int pressureSensor3 = setMux(2, 14);
-    samples31[i] = analogRead(pressureSensor3);
-    int pressureSensor4 = setMux(2, 15);
-    samples32[i] = analogRead(pressureSensor4);
-    */
     delay(10);
   }
 
@@ -446,12 +398,6 @@ void loop() {
   float avgSWB1;
   float avgSWB2;
   float avgSWB3;
-  float avgEntrSWB1;
-  float avgEntrSWB2;
-  float avgEntrSWB3;
-  float avgExitSWB1;
-  float avgExitSWB2;
-  float avgExitSWB3;
   float avgEntrBWB1;
   float avgEntrBWB2;
   float avgEntrBWB3;
@@ -477,12 +423,6 @@ void loop() {
   avgSWB1 = 0;
   avgSWB2 = 0;
   avgSWB3 = 0;
-  avgEntrSWB1 = 0;
-  avgEntrSWB2 = 0;
-  avgEntrSWB3 = 0;
-  avgExitSWB1 = 0;
-  avgExitSWB2 = 0;
-  avgExitSWB3 = 0;
   avgEntrBWB1 = 0;
   avgEntrBWB2 = 0;
   avgEntrBWB3 = 0;
@@ -509,12 +449,6 @@ void loop() {
     avgSWB1 += samples8[i];
     avgSWB2 += samples9[i];
     avgSWB3 += samples10[i];
-    avgEntrSWB1 += samples11[i];
-    avgEntrSWB2 += samples12[i];
-    avgEntrSWB3 += samples13[i];
-    avgExitSWB1 += samples14[i];
-    avgExitSWB2 += samples15[i];
-    avgExitSWB3 += samples16[i];
     avgEntrBWB1 += samples17[i];
     avgEntrBWB2 += samples18[i];
     avgEntrBWB3 += samples19[i];
@@ -541,12 +475,6 @@ void loop() {
   avgSWB1 = avgSWB1 / NUMSAMPLES;
   avgSWB2 = avgSWB2 / NUMSAMPLES;
   avgSWB3 = avgSWB3 / NUMSAMPLES;
-  avgEntrSWB1 = avgEntrSWB1 / NUMSAMPLES;
-  avgEntrSWB2 = avgEntrSWB2 / NUMSAMPLES;
-  avgEntrSWB3 = avgEntrSWB3 / NUMSAMPLES;
-  avgExitSWB1 = avgExitSWB1 / NUMSAMPLES;
-  avgExitSWB2 = avgExitSWB2 / NUMSAMPLES;
-  avgExitSWB3 = avgExitSWB3 / NUMSAMPLES;
   avgEntrBWB1 = avgEntrBWB1 / NUMSAMPLES;
   avgEntrBWB2 = avgEntrBWB2 / NUMSAMPLES;
   avgEntrBWB3 = avgEntrBWB3 / NUMSAMPLES;
@@ -574,12 +502,6 @@ void loop() {
   float avgSWB1Resist = SERIESRESISTOR / (1023 / (avgSWB1)-1);
   float avgSWB2Resist = SERIESRESISTOR / (1023 / (avgSWB2)-1);
   float avgSWB3Resist = SERIESRESISTOR / (1023 / (avgSWB3)-1);
-  float avgEntrSWB1Resist = SERIESRESISTOR / (1023 / (avgEntrSWB1)-1);
-  float avgEntrSWB2Resist = SERIESRESISTOR / (1023 / (avgEntrSWB2)-1);
-  float avgEntrSWB3Resist = SERIESRESISTOR / (1023 / (avgEntrSWB3)-1);
-  float avgExitSWB1Resist = SERIESRESISTOR / (1023 / (avgExitSWB1)-1);
-  float avgExitSWB2Resist = SERIESRESISTOR / (1023 / (avgExitSWB2)-1);
-  float avgExitSWB3Resist = SERIESRESISTOR / (1023 / (avgExitSWB3)-1);
   float avgEntrBWB1Resist = SERIESRESISTOR / (1023 / (avgEntrBWB1)-1);
   float avgEntrBWB2Resist = SERIESRESISTOR / (1023 / (avgEntrBWB2)-1);
   float avgEntrBWB3Resist = SERIESRESISTOR / (1023 / (avgEntrBWB3)-1);
@@ -603,12 +525,6 @@ void loop() {
   float steinhartSWB1 = 1 / ((log(avgSWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
   float steinhartSWB2 = 1 / ((log(avgSWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
   float steinhartSWB3 = 1 / ((log(avgSWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  float steinhartEntrSWB1 = 1 / ((log(avgEntrSWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  float steinhartEntrSWB2 = 1 / ((log(avgEntrSWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  float steinhartEntrSWB3 = 1 / ((log(avgEntrSWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  float steinhartExitSWB1 = 1 / ((log(avgExitSWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  float steinhartExitSWB2 = 1 / ((log(avgExitSWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  float steinhartExitSWB3 = 1 / ((log(avgExitSWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
   float steinhartEntrBWB1 = 1 / ((log(avgEntrBWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
   float steinhartEntrBWB2 = 1 / ((log(avgEntrBWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
   float steinhartEntrBWB3 = 1 / ((log(avgEntrBWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
@@ -626,8 +542,6 @@ void loop() {
   float IntraArrayTemp = (steinhartIntraArray1 + steinhartIntraArray2 + steinhartIntraArray3 + steinhartIntraArray4) / 4;
   float ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
   float SWBTemp = (steinhartSWB1 + steinhartSWB2) / 2;  //steinhartSWB3 deleted due to bad sensor error
-  float EntrSWBTemp = (steinhartEntrSWB1 + steinhartEntrSWB2 + steinhartEntrSWB3) / 3;
-  float ExitSWBTemp = (steinhartExitSWB1 + steinhartExitSWB2 + steinhartExitSWB3) / 3;
   float EntrBWBTemp = (steinhartEntrBWB1 + steinhartEntrBWB2 + steinhartEntrBWB3) / 3;
   float BWBTemp = (steinhartBWB1 + steinhartBWB2 + steinhartBWB3 + steinhartBWB4 + steinhartBWB5 + steinhartBWB6) / 6;
   float ExitBWBTemp = (steinhartExitBWB1 + steinhartExitBWB2 + steinhartExitBWB3) / 3;
@@ -636,11 +550,11 @@ void loop() {
   //float braintemp_atm;
   braintemp_atm = IntraArrayTemp;  //This is the current brain temperature
   InputPeltierPID = braintemp_atm;
-  myPID_peltier.Compute();
-  analogWrite(DACPIN, 255 - OutputPeltierPID);
+  myPID_peltier.Compute(); 
+  dacValue = 255 - OutputPeltierPID;
+  analogWrite(DACPIN, dacValue);
 
   //Water Pump/Block PID
-  //float WBTemp_atm;
   WBTemp_atm = SWBTemp;
   if (WBTemp_atm >= WBTempIdeal) {
     InputWB = WBTemp_atm;
@@ -657,6 +571,13 @@ void loop() {
       } else {
         pwm->period(1.0);  // Set to 1 Hz if the frequency goes to 0 to avoid errors
         Serial.println("Frequency too low, set to 1 Hz.");
+        
+        logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+        logFile.print("Date/Time: ");
+        logFile.print(getLocaltime());
+        logFile.print(",");
+        logFile.println("Frequency too low, set to 1 Hz.");
+        logFile.close();
       }
       // Update the previous frequency tracker
       previousFreq = quantizedFreq;
@@ -666,20 +587,26 @@ void loop() {
   }
 
   //Peltier Overcurrent and Overvoltage Protection
-  peltierCurrent = peltierINA260.readCurrent() / 1000;
-  peltierVoltage = peltierINA260.readBusVoltage() / 1000;
-  pumpCurrent = pumpINA260.readCurrent() / 1000;
-  pumpVoltage = pumpINA260.readBusVoltage() / 1000;
+  peltierCurrent = abs(peltierINA260.readCurrent() / 1000);
+  peltierVoltage = abs(peltierINA260.readBusVoltage() / 1000);
+  pumpCurrent = abs(pumpINA260.readCurrent() / 1000);
+  pumpVoltage = abs(pumpINA260.readBusVoltage() / 1000);
+  
   //Turn off Power to peltier if too high
-
-
-/*
   if (peltierCurrent >= 2 || peltierVoltage >= 8) {
     analogWrite(DACPIN, 255);
     digitalWrite(peltierRelay, LOW);
 
     Serial.print("ERROR: Peltier Overcurrenting/volting");
     updateErrorStatus("ERROR: Peltier Overcurrenting/volting");
+
+    logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+    logFile.print("Date/Time: ");
+    logFile.print(getLocaltime());
+    logFile.print(",");
+    logFile.println("ERROR: Peltier Overcurrenting/volting");
+    logFile.close();
+
   }
 
 
@@ -691,8 +618,15 @@ void loop() {
     digitalWrite(peltierRelay, HIGH);
     Serial.println("ERROR: Water Pump Overvolting");
     updateErrorStatus("ERROR: Water Pump Overvolting");
+
+    logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+    logFile.print("Date/Time: ");
+    logFile.print(getLocaltime());
+    logFile.print(",");
+    logFile.println("ERROR: Water Pump Overvolting");
+    logFile.close();
   }
-*/
+
 
 
   //Flow Rate Sensor Detection
@@ -706,6 +640,13 @@ void loop() {
   if (aFlow == 0.0 && aTemperature == 0.0){
     aFlow_bad = 1;
     Serial.println("Flow Sensor A Bad");
+
+    logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+    logFile.print("Date/Time: ");
+    logFile.print(getLocaltime());
+    logFile.print(",");
+    logFile.println("Flow Sensor A Bad");
+    logFile.close();
   }
   else {
     aFlow_bad = 0;
@@ -714,6 +655,13 @@ void loop() {
   if (bFlow == 0.0 && bTemperature == 0.0){
     bFlow_bad = 1;
     Serial.println("Flow Sensor B Bad");
+
+    logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+    logFile.print("Date/Time: ");
+    logFile.print(getLocaltime());
+    logFile.print(",");
+    logFile.println("Flow Sensor B Bad");
+    logFile.close();
   }
   else {
     bFlow_bad = 0;
@@ -728,6 +676,13 @@ void loop() {
 
       Serial.println("ERROR: No Flow Detected");
       updateErrorStatus("ERROR: No Flow Detected");
+
+      logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+      logFile.print("Date/Time: ");
+      logFile.print(getLocaltime());
+      logFile.print(",");
+      logFile.println("ERROR: No Flow Detected");
+      logFile.close();
     }
   }
   else if (aFlow_bad == 1 && bFlow_bad == 0){
@@ -738,6 +693,13 @@ void loop() {
 
       Serial.println("ERROR: No Flow Detected");
       updateErrorStatus("ERROR: No Flow Detected");
+
+      logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+      logFile.print("Date/Time: ");
+      logFile.print(getLocaltime());
+      logFile.print(",");
+      logFile.println("ERROR: No Flow Detected");
+      logFile.close();
     }
   }
   else if (aFlow_bad == 0 && bFlow_bad == 1){
@@ -748,11 +710,24 @@ void loop() {
 
       Serial.println("ERROR: No Flow Detected");
       updateErrorStatus("ERROR: No Flow Detected");
+
+      logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+      logFile.print("Date/Time: ");
+      logFile.print(getLocaltime());
+      logFile.print(",");
+      logFile.println("ERROR: No Flow Detected");
+      logFile.close();
     }
   }
   else if (aFlow_bad == 1 && bFlow_bad == 1){
     Serial.println("ERROR: Bad Flow Sensors");
-    myFile.println("No good flow sensors");
+
+    logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+    logFile.print("Date/Time: ");
+    logFile.print(getLocaltime());
+    logFile.print(",");
+    logFile.println("ERROR: Bad Flow Sensors");
+    logFile.close();
   }
 
   //Detecting Pressure Values
@@ -768,6 +743,7 @@ void loop() {
   float lowPressure = 0;
   float highPressure = 5;
 
+//_____________________________________________________________________________________________________________________________________________________________________________________________
   /*
   if (pressureApplied1 > highPressure || pressureApplied2 > highPressure) {
     analogWrite(DACPIN, 255);  //DACPIN 0 means completely on, 255 means off
@@ -778,6 +754,7 @@ void loop() {
     updateErrorStatus("ERROR: Aberrant Pressure Levels");
   }
   */
+//_____________________________________________________________________________________________________________________________________________________________________________________________
 
   //Water block temp 6 degrees above baseline and max flow rate --> Countdown for 3 minutes activates
   if (WBTemp_atm >= 41 && freq == 60) {
@@ -824,97 +801,91 @@ void loop() {
   //Update webpage and datamonitor
   handleWebRequests(server);
 
+  dacVoltage = (dacValue / 255.0) * 3.3;
 
+
+  
   //Save Data to SD Card
-  myFile = SD.open("testing.txt", FILE_WRITE);  //Opening the file here
-
-  myFile.print(getLocaltime());
-  myFile.print(",");
-  myFile.print(steinhartIntraArray1);
-  myFile.print(",");
-  myFile.print(steinhartIntraArray2);  //Saving the data here. It is done like this so easy import to CSV format
-  myFile.print(",");
-  myFile.print(steinhartIntraArray3);
-  myFile.print(",");
-  myFile.print(steinhartIntraArray4);
-  myFile.print(",");
-  myFile.print(steinhartExtraArray1);
-  myFile.print(",");
-  myFile.print(steinhartExtraArray2);
-  myFile.print(",");
-  myFile.print(steinhartExtraArray3);
-  myFile.print(",");
-  myFile.print(steinhartSWB1);
-  myFile.print(",");
-  myFile.print(steinhartSWB2);
-  myFile.print(",");
-  myFile.print(steinhartSWB3);
-  myFile.print(",");
-  myFile.print(steinhartEntrSWB1);  //Saving the data here. It is done like this so easy import to CSV format
-  myFile.print(",");
-  myFile.print(steinhartEntrSWB2);
-  myFile.print(",");
-  myFile.print(steinhartEntrSWB3);
-  myFile.print(",");
-  myFile.print(steinhartExitSWB1);
-  myFile.print(",");
-  myFile.print(steinhartExitSWB2);
-  myFile.print(",");
-  myFile.print(steinhartExitSWB3);
-  myFile.print(",");
-  myFile.print(steinhartEntrBWB1);
-  myFile.print(",");
-  myFile.print(steinhartEntrBWB2);
-  myFile.print(",");
-  myFile.print(steinhartEntrBWB3);
-  myFile.print(",");
-  myFile.print(steinhartBWB1);  //Saving the data here. It is done like this so easy import to CSV format
-  myFile.print(",");
-  myFile.print(steinhartBWB2);
-  myFile.print(",");
-  myFile.print(steinhartBWB3);
-  myFile.print(",");
-  myFile.print(steinhartBWB4);
-  myFile.print(",");
-  myFile.print(steinhartBWB5);
-  myFile.print(",");
-  myFile.print(steinhartBWB6);
-  myFile.print(",");
-  myFile.print(steinhartExitBWB1);
-  myFile.print(",");
-  myFile.print(steinhartExitBWB2);
-  myFile.print(",");
-  myFile.print(steinhartExitBWB3);
-  myFile.print(",");
-  myFile.print(peltierCurrent);  //Saving the data here. It is done like this so easy import to CSV format
-  myFile.print(",");
-  myFile.print(peltierVoltage);
-  myFile.print(",");
-  myFile.print(pumpCurrent);
-  myFile.print(",");
-  myFile.print(pumpVoltage);
-  myFile.print(",");
-  myFile.print(aFlow);
-  myFile.print(",");
-  myFile.print(bFlow);
-  myFile.print(",");
-  myFile.print(pressureApplied1);
-  myFile.print(",");
-  myFile.print(pressureApplied2);
-  myFile.print(",");
-  myFile.print(Kp_peltier);
-  myFile.print(",");
-  myFile.print(Ki_peltier);
-  myFile.print(",");
-  myFile.print(Kd_peltier);
-  myFile.print(",");
-  myFile.print(SetpointPeltier);
-  myFile.print(",");
-  myFile.println(clientStatus);
-  myFile.close();
+  dataFile = SD.open("data.txt", FILE_WRITE);  //Opening the file here
+  dataFile.print(getLocaltime());
+  dataFile.print(",");
+  dataFile.print(steinhartIntraArray1);
+  dataFile.print(",");
+  dataFile.print(steinhartIntraArray2);  //Saving the data here. It is done like this so easy import to CSV format
+  dataFile.print(",");
+  dataFile.print(steinhartIntraArray3);
+  dataFile.print(",");
+  dataFile.print(steinhartIntraArray4);
+  dataFile.print(",");
+  dataFile.print(steinhartExtraArray1);
+  dataFile.print(",");
+  dataFile.print(steinhartExtraArray2);
+  dataFile.print(",");
+  dataFile.print(steinhartExtraArray3);
+  dataFile.print(",");
+  dataFile.print(steinhartSWB1);
+  dataFile.print(",");
+  dataFile.print(steinhartSWB2);
+  dataFile.print(",");
+  dataFile.print(steinhartSWB3);
+  dataFile.print(",");
+  dataFile.print(steinhartEntrBWB1);
+  dataFile.print(",");
+  dataFile.print(steinhartEntrBWB2);
+  dataFile.print(",");
+  dataFile.print(steinhartEntrBWB3);
+  dataFile.print(",");
+  dataFile.print(steinhartBWB1);  //Saving the data here. It is done like this so easy import to CSV format
+  dataFile.print(",");
+  dataFile.print(steinhartBWB2);
+  dataFile.print(",");
+  dataFile.print(steinhartBWB3);
+  dataFile.print(",");
+  dataFile.print(steinhartBWB4);
+  dataFile.print(",");
+  dataFile.print(steinhartBWB5);
+  dataFile.print(",");
+  dataFile.print(steinhartBWB6);
+  dataFile.print(",");
+  dataFile.print(steinhartExitBWB1);
+  dataFile.print(",");
+  dataFile.print(steinhartExitBWB2);
+  dataFile.print(",");
+  dataFile.print(steinhartExitBWB3);
+  dataFile.print(",");
+  dataFile.print(peltierCurrent);  //Saving the data here. It is done like this so easy import to CSV format
+  dataFile.print(",");
+  dataFile.print(peltierVoltage);
+  dataFile.print(",");
+  dataFile.print(pumpCurrent);
+  dataFile.print(",");
+  dataFile.print(pumpVoltage);
+  dataFile.print(",");
+  dataFile.print(aFlow);
+  dataFile.print(",");
+  dataFile.print(bFlow);
+  dataFile.print(",");
+  dataFile.print(pressureApplied1);
+  dataFile.print(",");
+  dataFile.print(pressureApplied2);
+  dataFile.print(",");
+  dataFile.print(Kp_peltier);
+  dataFile.print(",");
+  dataFile.print(Ki_peltier);
+  dataFile.print(",");
+  dataFile.print(Kd_peltier);
+  dataFile.print(",");
+  dataFile.print(SetpointPeltier);
+  dataFile.print(",");
+  dataFile.print(clientStatus);
+  dataFile.print(",");
+  dataFile.print(previousFreq);
+  dataFile.print(",");
+  dataFile.print(dacVoltage); 
+  dataFile.println();
+  dataFile.close();
 
   //Sending data to Serial
-
   Serial.print("IntraArray:");
   Serial.print(steinhartIntraArray1);
   Serial.print(",");
@@ -937,20 +908,6 @@ void loop() {
   Serial.print(steinhartSWB2);
   Serial.print(",");
   Serial.println(steinhartSWB3);
-
-  Serial.print("EntrSWB:");
-  Serial.print(steinhartEntrSWB1);  //Saving the data here. It is done like this so easy import to CSV format
-  Serial.print(",");
-  Serial.print(steinhartEntrSWB2);
-  Serial.print(",");
-  Serial.println(steinhartEntrSWB3);
-
-  Serial.print("ExitSWB:");
-  Serial.print(steinhartExitSWB1);
-  Serial.print(",");
-  Serial.print(steinhartExitSWB2);
-  Serial.print(",");
-  Serial.println(steinhartExitSWB3);
 
   Serial.print("EntrBWB:");
   Serial.print(steinhartEntrBWB1);
@@ -1005,6 +962,10 @@ void loop() {
   Serial.print(previousFreq);
   Serial.println();
 
+  Serial.print("DAC Voltage:");
+  Serial.print(dacVoltage, 2); // Print voltage with 2 decimal places
+  Serial.println(" V");
+
   Serial.print("Pressure Sensors:");
   Serial.print(pressureApplied1);
   Serial.print(",");
@@ -1027,53 +988,6 @@ void loop() {
   Serial.print("Client Status:");
   Serial.println(clientStatus);
 
-  /*//Sending Data to Client
-  
-    //Printing Client Stats
-      client.print("Client Status");
-      client.print(clientStatus);
-        client.print("\t");
-    //Printing Time and Data
-      client.print(getLocaltime());
-        client.print("\t");
-    //Printing Temperature Info
-      client.print("Brain Temp:");
-      client.print(braintemp_atm);
-        client.print("\t");
-      client.print("Water Block Temp:");
-      client.print(WBTemp_atm);
-        client.print("\t");
-    //PID Strength
-      client.print("P_OUT(div10):");
-      client.print(OutputPeltierPID/10);
-        client.print("\t");  
-      client.print("WB_OUT(div10):");
-      client.print(OutputWB/10);
-        client.print("\t");
-      client.print("FREQ:");
-      client.print(freq);
-        client.print("\t");
-    //Current and Voltage Sensors
-      client.print("Peltier Current:");
-      client.print(peltierCurrent);
-        client.print("\t");
-      client.print("Peltier Voltage");
-      //client.print(peltierINA260.readBusVoltage()/1000);
-        client.print("\t");
-      client.print("Water Pump Current:");
-      //client.print(pumpINA260.readCurrent()/1000);
-        client.print("\t");
-      client.print("Water Pump Voltage:");
-      //client.print(pumpINA260.readBusVoltage()/1000);
-        client.print("\t");
-    //Flow Rate Sensors
-      client.print("aFlow: ");
-      client.print(aFlow);
-        client.print("\t");
-    //Pressure Sensors
-      client.print(pressureApplied1, decimalPlaces);
-      client.println("psi");
-        client.print("\t");*/
   delay(1000);
 }
 
