@@ -13,7 +13,7 @@ void handleWebRequests(WiFiServer& server);
 
 // References to the main script's variables
 extern double Kp_peltier, Ki_peltier, Kd_peltier;
-extern double SetpointPeltier;
+extern double SetpointPeltier, SetpointWB;
 extern float WBTemp_atm, braintemp_atm;
 extern float aFlow, bFlow;
 extern float pumpVoltage, pumpCurrent;
@@ -68,6 +68,8 @@ void handleWebRequests(WiFiServer& server) {
       client.print(",");
       client.print(SetpointPeltier);
       client.print(",");
+      client.print(SetpointWB);
+      client.print(",");
       client.print(WBTemp_atm);
       client.print(",");
       client.print(braintemp_atm);
@@ -95,7 +97,7 @@ void handleWebRequests(WiFiServer& server) {
       return;
     }
 
-    // Update Kp_peltier, Ki_peltier, Kd_peltier, and SetpointPeltier via HTTP requests
+    // Update Kp_peltier, Ki_peltier, Kd_peltier, SetpointPeltier, and SetpointWB via HTTP requests
     if (request.indexOf("GET /updateKp_peltier?newVal=") >= 0) {
       String newVal = request.substring(request.indexOf("newVal=") + 7);
       Kp_peltier = newVal.toDouble();
@@ -144,6 +146,18 @@ void handleWebRequests(WiFiServer& server) {
       client.stop();
       return;
     }
+    if (request.indexOf("GET /updateSetpointWB?newVal=") >= 0) {
+      String newVal = request.substring(request.indexOf("newVal=") + 7);
+      SetpointWB = newVal.toDouble();
+      Serial.print("SetpointWB updated to: ");
+      Serial.println(SetpointWB);
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: text/plain");
+      client.println();
+      client.println("OK");
+      client.stop();
+      return;
+    }
 
     // Serve the HTML page with the form and the graphs
     client.println("HTTP/1.1 200 OK");
@@ -154,7 +168,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("</head><body>");
     client.println("<h1>Live Data Display</h1>");
 
-    // Forms for updating Kp_peltier, Ki_peltier, Kd_peltier, and SetpointPeltier
+    // Forms for updating Kp_peltier, Ki_peltier, Kd_peltier, SetpointPeltier, and SetpointWB
     client.println("<form id='updateFormKp_peltier' onsubmit='submitForm(event, \"Kp_peltier\")'>");
     client.println("<label for=\"newValKp_peltier\">Update Kp_peltier (Proportional):</label><br>");
     client.println("<input type=\"number\" step=\"0.1\" id=\"newValKp_peltier\" name=\"newVal\"><br>");
@@ -179,11 +193,18 @@ void handleWebRequests(WiFiServer& server) {
     client.println("<button type='submit'>Submit Setpoint</button>");
     client.println("</form><br>");
 
+    client.println("<form id='updateFormSetpointWB' onsubmit='submitForm(event, \"SetpointWB\")'>");
+    client.println("<label for=\"newValSetpointWB\">Update Setpoint WB:</label><br>");
+    client.println("<input type=\"number\" step=\"0.1\" id=\"newValSetpointWB\" name=\"newVal\"><br>");
+    client.println("<button type='submit'>Submit Setpoint</button>");
+    client.println("</form><br>");
+
     // Display the current values
     client.println("<p>Proportional: <span id='proportionalValue'>0</span></p>");
     client.println("<p>Integral: <span id='integralValue'>0</span></p>");
     client.println("<p>Derivative: <span id='derivativeValue'>0</span></p>");
     client.println("<p>Setpoint Peltier: <span id='setpointPeltierValue'>" + String(SetpointPeltier) + "</span></p>");  // Display SetpointPeltier
+    client.println("<p>Setpoint WB: <span id='setpointWBValue'>" + String(SetpointWB) + "</span></p>");  // Display SetpointWB
     client.println("<p>Water Bottle Temperature: <span id='WBTempValue'>0.0</span></p>");
     client.println("<p>Brain Temperature: <span id='brainTempValue'>0.0</span></p>");
     client.println("<p>Flow Rate A: <span id='aFlowValue'>0.0</span></p>");
@@ -213,6 +234,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("let dataIntegral = [];");
     client.println("let dataDerivative = [];");
     client.println("let dataSetpointPeltier = [];");
+    client.println("let dataSetpointWB = [];");
     client.println("let dataWBTemp = [];");
     client.println("let dataBrainTemp = [];");
     client.println("let dataAFlow = [];");
@@ -386,24 +408,26 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      let Ki_peltier = parseFloat(values[1]);");
     client.println("      let Kd_peltier = parseFloat(values[2]);");
     client.println("      let setpointPeltier = parseFloat(values[3]);");  // Read SetpointPeltier
-    client.println("      let waterBottleTemp = parseFloat(values[4]);");
-    client.println("      let brainTemp = parseFloat(values[5]);");
-    client.println("      let flowRateA = parseFloat(values[6]);");
-    client.println("      let flowRateB = parseFloat(values[7]);");
-    client.println("      let pumpVoltage = parseFloat(values[8]);");
-    client.println("      let pumpCurrent = parseFloat(values[9]);");
-    client.println("      let peltierVoltage = parseFloat(values[10]);");
-    client.println("      let peltierCurrent = parseFloat(values[11]);");
-    client.println("      let pressure1 = parseFloat(values[12]);");
-    client.println("      let pressure2 = parseFloat(values[13]);");
-    client.println("      let previousFreq = parseFloat(values[14]);");
-    client.println("      let dacVoltage = parseFloat(values[15]);");
+    client.println("      let setpointWB = parseFloat(values[4]);");  // Read SetpointWB
+    client.println("      let waterBottleTemp = parseFloat(values[5]);");
+    client.println("      let brainTemp = parseFloat(values[6]);");
+    client.println("      let flowRateA = parseFloat(values[7]);");
+    client.println("      let flowRateB = parseFloat(values[8]);");
+    client.println("      let pumpVoltage = parseFloat(values[9]);");
+    client.println("      let pumpCurrent = parseFloat(values[10]);");
+    client.println("      let peltierVoltage = parseFloat(values[11]);");
+    client.println("      let peltierCurrent = parseFloat(values[12]);");
+    client.println("      let pressure1 = parseFloat(values[13]);");
+    client.println("      let pressure2 = parseFloat(values[14]);");
+    client.println("      let previousFreq = parseFloat(values[15]);");
+    client.println("      let dacVoltage = parseFloat(values[16]);");
 
     // Update the display
     client.println("      document.getElementById('proportionalValue').innerText = Kp_peltier;");
     client.println("      document.getElementById('integralValue').innerText = Ki_peltier;");
     client.println("      document.getElementById('derivativeValue').innerText = Kd_peltier;");
     client.println("      document.getElementById('setpointPeltierValue').innerText = setpointPeltier.toFixed(1);");  // Update display for SetpointPeltier
+    client.println("      document.getElementById('setpointWBValue').innerText = setpointWB.toFixed(1);");  // Update display for SetpointWB
     client.println("      document.getElementById('WBTempValue').innerText = waterBottleTemp.toFixed(1);");
     client.println("      document.getElementById('brainTempValue').innerText = brainTemp.toFixed(1);");
     client.println("      document.getElementById('aFlowValue').innerText = flowRateA.toFixed(1);");
@@ -422,6 +446,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      dataIntegral.push(Ki_peltier);");
     client.println("      dataDerivative.push(Kd_peltier);");
     client.println("      dataSetpointPeltier.push(setpointPeltier);");  // Store SetpointPeltier data
+    client.println("      dataSetpointWB.push(setpointWB);");  // Store SetpointWB data
     client.println("      dataWBTemp.push(waterBottleTemp);");
     client.println("      dataBrainTemp.push(brainTemp);");
     client.println("      dataAFlow.push(flowRateA);");
@@ -441,6 +466,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      if (dataIntegral.length > 100) { dataIntegral.shift(); }");
     client.println("      if (dataDerivative.length > 100) { dataDerivative.shift(); }");
     client.println("      if (dataSetpointPeltier.length > 100) { dataSetpointPeltier.shift(); }");  // Limit SetpointPeltier data
+    client.println("      if (dataSetpointWB.length > 100) { dataSetpointWB.shift(); }");  // Limit SetpointWB data
     client.println("      if (dataWBTemp.length > 100) { dataWBTemp.shift(); }");
     client.println("      if (dataBrainTemp.length > 100) { dataBrainTemp.shift(); }");
     client.println("      if (dataAFlow.length > 100) { dataAFlow.shift(); }");
