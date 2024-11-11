@@ -105,7 +105,7 @@ int freq = 0;
 //These are parameters that can be adjusted for temperature cutoffs -- TempIdeals are equivalent to Setpoint
 int BrainTempIdeal = 25;  //Ideal brain temperature, currently 12 for testing purposes (should be 25)
 int WBTempMax = 50;       //The maximum peltier plate temperature, currently 25 for testing purposes (should be 40)
-int WBTempIdeal = -60;     //The ideal temperature of the WB, currently 22 for testing purposes (should be 35)
+int WBTempIdeal = 37;     //The ideal temperature of the WB, currently 22 for testing purposes (should be 35)
 
 //These are vectors to save analog sensor data. Total of 32 of sensors
 uint16_t samples1[NUMSAMPLES];
@@ -743,8 +743,9 @@ void loop() {
   float lowPressure = 0;
   float highPressure = 5;
 
-//_____________________________________________________________________________________________________________________________________________________________________________________________
   /*
+  _____________________________________________________________________________________________________________________________________________________________________________________________
+
   if (pressureApplied1 > highPressure || pressureApplied2 > highPressure) {
     analogWrite(DACPIN, 255);  //DACPIN 0 means completely on, 255 means off
     digitalWrite(pumpRelay, HIGH);
@@ -752,9 +753,17 @@ void loop() {
 
     Serial.print("ERROR: Aberrant Pressure Levels");
     updateErrorStatus("ERROR: Aberrant Pressure Levels");
+
+    logFile = SD.open("log.txt", FILE_WRITE);  //Opening the file here
+    logFile.print("Date/Time: ");
+    logFile.print(getLocaltime());
+    logFile.print(",");
+    logFile.println("ERROR: Aberrant Pressure Levels");
+    logFile.close();
   }
+
+  _____________________________________________________________________________________________________________________________________________________________________________________________
   */
-//_____________________________________________________________________________________________________________________________________________________________________________________________
 
   //Water block temp 6 degrees above baseline and max flow rate --> Countdown for 3 minutes activates
   if (WBTemp_atm >= 41 && freq == 60) {
