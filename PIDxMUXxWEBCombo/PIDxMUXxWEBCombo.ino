@@ -541,7 +541,7 @@ void loop() {
   //Average multiple temp sensors into 1 temperature
   float IntraArrayTemp = (steinhartIntraArray1 + steinhartIntraArray2 + steinhartIntraArray3 + steinhartIntraArray4) / 4;
   float ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
-  float SWBTemp = (steinhartSWB1 + steinhartSWB2) / 2;  //steinhartSWB3 deleted due to bad sensor error
+  float SWBTemp = (steinhartSWB1 + steinhartSWB3) / 2;  //steinhartSWB3 deleted due to bad sensor error
   float EntrBWBTemp = (steinhartEntrBWB1 + steinhartEntrBWB2 + steinhartEntrBWB3) / 3;
   float BWBTemp = (steinhartBWB1 + steinhartBWB2 + steinhartBWB3 + steinhartBWB4 + steinhartBWB5 + steinhartBWB6) / 6;
   float ExitBWBTemp = (steinhartExitBWB1 + steinhartExitBWB2 + steinhartExitBWB3) / 3;
@@ -743,9 +743,6 @@ void loop() {
   float lowPressure = 0;
   float highPressure = 5;
 
-  /*
-  _____________________________________________________________________________________________________________________________________________________________________________________________
-
   if (pressureApplied1 > highPressure || pressureApplied2 > highPressure) {
     analogWrite(DACPIN, 255);  //DACPIN 0 means completely on, 255 means off
     digitalWrite(pumpRelay, HIGH);
@@ -762,11 +759,8 @@ void loop() {
     logFile.close();
   }
 
-  _____________________________________________________________________________________________________________________________________________________________________________________________
-  */
-
   //Water block temp 6 degrees above baseline and max flow rate --> Countdown for 3 minutes activates
-  if (WBTemp_atm >= 41 && freq == 60) {
+  if (WBTemp_atm >= (WBTemp_atm + 6) && freq == 60) {
     startTime = startTime;  //If maxxing out, keep the starttime of the max the same
   } else {
     int newTime = millis();  //If normal operations, update startime with current time
