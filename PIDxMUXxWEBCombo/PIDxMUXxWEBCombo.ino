@@ -161,11 +161,20 @@ void setupWiFiAP();
 int setMux(int mux, int channel);
 String getLocaltime();
 
+//Reset Pin for Arduino
+#define ResetPin D30
+
 
 void setup() {
+  //Turning 'Reset'Pin to High to avoid resetting arduino
+  digitalWrite(ResetPin, HIGH);
+  delay(200);
+  pinMode(ResetPin, OUTPUT);
 
   // put your setup code here, to run once:
   Serial.begin(9600);
+
+  
 
   //while (!Serial) {};
   //Turning on Multiplexer and Initializing Pins

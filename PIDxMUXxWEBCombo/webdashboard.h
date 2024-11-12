@@ -1,5 +1,6 @@
 #ifndef WEBDASHBOARD_H
 #define WEBDASHBOARD_H
+#define ResetPin 30  // Change 5 to any available digital pin
 
 #include <WiFi.h>
 #include "chartjs.h"  // Include the chart.js content
@@ -44,6 +45,22 @@ void handleWebRequests(WiFiServer& server) {
   if (client && client.connected()) {
     String request = client.readStringUntil('\r');
     client.flush();
+
+    //Reseting Arduino
+    // New route to handle digital signal trigger
+    if (request.indexOf("GET /triggerDigitalSignal") >= 0) {
+      // Set the digital pin HIGH for a short pulse
+
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: text/plain");
+      client.println();
+      client.print("Signal Sent");
+      client.stop();
+      
+      digitalWrite(ResetPin, LOW);
+      
+      return;
+    }
 
     // Serve the chart.js content when requested
     if (request.indexOf("GET /chartjs.js") >= 0) {
@@ -227,6 +244,9 @@ void handleWebRequests(WiFiServer& server) {
 
     // Button to download CSV
     client.println("<button onclick='downloadCSV()'>Download CSV</button>");
+
+    //Button to reset Arduino
+    client.println("<button onclick='sendSignal()'>Reset Arduino</button>");
 
     // JavaScript to update the value, the chart, and download data as CSV
     client.println("<script>");
@@ -519,6 +539,14 @@ void handleWebRequests(WiFiServer& server) {
     client.println("  link.setAttribute('download', 'data.csv');");
     client.println("  document.body.appendChild(link);");
     client.println("  link.click();");
+    client.println("}");
+
+    // Function to Reset Arduino
+    client.println("function sendSignal() {");
+    client.println("fetch('/triggerDigitalSignal')");
+    client.println(".then(response => response.text())");
+    client.println(".then(data => console.log(data))");
+    client.println(".catch(error => console.error('Error:', error));");
     client.println("}");
 
     client.println("setInterval(updateValue, 1000);");  
