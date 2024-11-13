@@ -38,6 +38,29 @@ float steinhartExitBWB1 = 0.0;
 float steinhartExitBWB2 = 0.0;
 float steinhartExitBWB3 = 0.0;
 
+int steinhartIntraArray1_flag = 1;
+int steinhartIntraArray2_flag = 1; 
+int steinhartIntraArray3_flag = 1;
+int steinhartIntraArray4_flag = 1;
+int steinhartExtraArray1_flag = 1;
+int steinhartExtraArray2_flag = 1;
+int steinhartExtraArray3_flag = 1;
+int steinhartSWB1_flag = 1;
+int steinhartSWB2_flag = 1;
+int steinhartSWB3_flag = 1;
+int steinhartEntrBWB1_flag = 1;
+int steinhartEntrBWB2_flag = 1;
+int steinhartEntrBWB3_flag = 1;
+int steinhartBWB1_flag = 1;
+int steinhartBWB2_flag = 1;
+int steinhartBWB3_flag = 1;
+int steinhartBWB4_flag = 1;
+int steinhartBWB5_flag = 1;
+int steinhartBWB6_flag = 1;
+int steinhartExitBWB1_flag = 1;
+int steinhartExitBWB2_flag = 1;
+int steinhartExitBWB3_flag = 1;
+
 //Define avg thermistor global variables for webdashboard and .h files
 float braintemp_atm = 0.0; 
 float ExtraArrayTemp = 0.0;
@@ -132,8 +155,8 @@ int freq = 0;
 //Temperature controls for PID loops
 //These are parameters that can be adjusted for temperature cutoffs -- TempIdeals are equivalent to Setpoint
 int BrainTempIdeal = 25;  //Ideal brain temperature, currently 12 for testing purposes (should be 25)
-int WBTempMax = 50;       //The maximum peltier plate temperature, currently 25 for testing purposes (should be 40)
-int WBTempIdeal = 37;     //The ideal temperature of the WB, currently 22 for testing purposes (should be 35)
+int SWBTempMax = 50;       //The maximum peltier plate temperature, currently 25 for testing purposes (should be 40)
+int SWBTempIdeal = 37;     //The ideal temperature of the WB, currently 22 for testing purposes (should be 35)
 
 //These are vectors to save analog sensor data. Total of 32 of sensors
 uint16_t samples1[NUMSAMPLES];
@@ -295,7 +318,7 @@ void setup() {
   //Turning PID on
   SetpointPeltier = BrainTempIdeal;
   myPID_peltier.SetMode(AUTOMATIC);
-  SetpointWB = WBTempIdeal;
+  SetpointWB = SWBTempIdeal;
   myPID_WB.SetMode(AUTOMATIC);
 
   //Initializing DAC
@@ -557,7 +580,7 @@ void loop() {
 
   //Water Pump/Block PID
   SWBTemp_atm = SWBTemp;
-  if (SWBTemp_atm >= WBTempIdeal) {
+  if (SWBTemp_atm >= SWBTempIdeal) {
     InputWB = SWBTemp_atm;
     myPID_WB.Compute();
     freq = map(OutputWB, 0, 255, 0, 60);
@@ -670,7 +693,7 @@ void loop() {
 
   //Sudden Flow Rate Drop Detection
   if (aFlow_bad == 0 && bFlow_bad == 0){
-    if ((aFlow <= 5 || bFlow <= 5) && SWBTemp_atm >= WBTempMax) {
+    if ((aFlow <= 5 || bFlow <= 5) && SWBTemp_atm >= SWBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -687,7 +710,7 @@ void loop() {
     }
   }
   else if (aFlow_bad == 1 && bFlow_bad == 0){
-    if (bFlow <= 5 && SWBTemp_atm >= WBTempMax) {
+    if (bFlow <= 5 && SWBTemp_atm >= SWBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -704,7 +727,7 @@ void loop() {
     }
   }
   else if (aFlow_bad == 0 && bFlow_bad == 1){
-    if (aFlow <= 5 && SWBTemp_atm >= WBTempMax) {
+    if (aFlow <= 5 && SWBTemp_atm >= SWBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -995,6 +1018,10 @@ void loop() {
   Serial.print(SetpointPeltier);
   Serial.print(",");
   Serial.println(SetpointWB);
+
+  Serial.print("button:");
+  Serial.println(steinhartIntraArray1_flag);
+  
 
   Serial.print("Client Status:");
   Serial.println(clientStatus);

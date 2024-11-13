@@ -63,7 +63,7 @@ extern float pumpCurrent;
 extern float peltierVoltage;
 extern float peltierCurrent;
 extern float previousFreq; 
-extern float dacVoltage;   
+extern float dacVoltage; 
 
 // Web dashboard error handling
 void updateErrorStatus(String errorMessage) {
@@ -92,7 +92,6 @@ void handleWebRequests(WiFiServer& server) {
     // New route to handle digital signal trigger
     if (request.indexOf("GET /triggerDigitalSignal") >= 0) {
       // Set the digital pin HIGH for a short pulse
-
       client.println("HTTP/1.1 200 OK");
       client.println("Content-Type: text/plain");
       client.println();
@@ -103,7 +102,7 @@ void handleWebRequests(WiFiServer& server) {
       
       return;
     }
-
+    
     // Serve the chart.js content when requested
     if (request.indexOf("GET /chartjs.js") >= 0) {
       client.println("HTTP/1.1 200 OK");
@@ -258,6 +257,8 @@ void handleWebRequests(WiFiServer& server) {
     client.println("<button type='submit'>Submit Setpoint</button>");
     client.println("</form><br>");
 
+
+
     // Display the current values
     client.println("<p>Proportional: <span id='proportionalValue'>0</span></p>");
     client.println("<p>Integral: <span id='integralValue'>0</span></p>");
@@ -299,7 +300,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("let dataDerivative = [];");
     client.println("let dataSetpointPeltier = [];");
     client.println("let dataSetpointWB = [];");
-    //client.println("let dataSWBTemp = [];");
+    client.println("let dataSWBTemp = [];");
     client.println("let dataBrainTemp = [];");
     client.println("let dataAFlow = [];");
     client.println("let dataBFlow = [];");
@@ -354,7 +355,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      labels: labels,");
     client.println("      datasets: [{");
     client.println("        label: 'Scalp Water Block Temp',");
-    client.println("        data: dataWBTemp,");
+    client.println("        data: dataSWBTemp,");
     client.println("        borderColor: 'orange',");
     client.println("        fill: false");
     client.println("      }, {");
@@ -481,7 +482,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("    }");
     client.println("});");
 
-    // Initialize the DAC chart
+    // Initialize the frequency chart
     client.println("let ctx7 = document.getElementById('dacChart').getContext('2d');");
     client.println("let dacChart = new Chart(ctx7, {");
     client.println("    type: 'line',");
@@ -618,7 +619,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("function downloadCSV() {");
     client.println("  let csvContent = 'data:text/csv;charset=utf-8,Time,Proportional,Integral,Derivative,Scalp Water Block Temp,Brain Temp,Flow Rate A,Flow Rate B\\n';");
     client.println("  for (let i = 0; i < dataProportional.length; i++) {");
-    client.println("    csvContent += labels[i] + ',' + dataProportional[i] + ',' + dataIntegral[i] + ',' + dataDerivative[i] + ',' + dataWBTemp[i] + ',' + dataBrainTemp[i] + ',' + dataAFlow[i] + ',' + dataBFlow[i] + '\\n';");
+    client.println("    csvContent += labels[i] + ',' + dataProportional[i] + ',' + dataIntegral[i] + ',' + dataDerivative[i] + ',' + dataSWBTemp[i] + ',' + dataBrainTemp[i] + ',' + dataAFlow[i] + ',' + dataBFlow[i] + '\\n';");
     client.println("  }");
     client.println("  var encodedUri = encodeURI(csvContent);");
     client.println("  var link = document.createElement('a');");
