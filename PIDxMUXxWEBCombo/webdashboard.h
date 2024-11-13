@@ -439,7 +439,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("    }");
     client.println("});");
 
-    // Initialize the frequency chart
+    // Initialize the DAC chart
     client.println("let ctx7 = document.getElementById('dacChart').getContext('2d');");
     client.println("let dacChart = new Chart(ctx7, {");
     client.println("    type: 'line',");
