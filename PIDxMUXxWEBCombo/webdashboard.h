@@ -12,16 +12,58 @@ String currentErrorMessage = ""; // Initialize to an empty string
 void setupWebDashboard(WiFiServer& server);
 void handleWebRequests(WiFiServer& server);
 
-// References to the main script's variables
+//Adjustable variables 
 extern double Kp_peltier, Ki_peltier, Kd_peltier;
 extern double SetpointPeltier, SetpointWB;
-extern float WBTemp_atm, braintemp_atm;
-extern float aFlow, bFlow;
-extern float pumpVoltage, pumpCurrent;
-extern float peltierVoltage, peltierCurrent;
-extern float pressureApplied1, pressureApplied2;
-extern float previousFreq;
-extern float dacVoltage;
+
+//column 1
+//Define thermistor references 
+extern float steinhartIntraArray1;
+extern float steinhartIntraArray2; 
+extern float steinhartIntraArray3;
+extern float steinhartIntraArray4;
+extern float steinhartExtraArray1;
+extern float steinhartExtraArray2;
+extern float steinhartExtraArray3;
+extern float steinhartSWB1;
+extern float steinhartSWB2;
+extern float steinhartSWB3;
+extern float steinhartEntrBWB1;
+extern float steinhartEntrBWB2;
+extern float steinhartEntrBWB3;
+extern float steinhartBWB1;
+extern float steinhartBWB2;
+extern float steinhartBWB3;
+extern float steinhartBWB4;
+extern float steinhartBWB5;
+extern float steinhartBWB6;
+extern float steinhartExitBWB1;
+extern float steinhartExitBWB2;
+extern float steinhartExitBWB3;
+
+//column 2
+//Define avg thermistor references
+extern float braintemp_atm; 
+extern float ExtraArrayTemp;
+extern float SWBTemp_atm;
+extern float EntrBWBTemp;
+extern float BWBTemp;
+extern float ExitBWBTemp;
+
+//column 3
+//Define flow, pressure, current, and voltage references 
+extern float pressureApplied1;
+extern float pressureApplied2;
+extern float aFlow;
+extern float bFlow;
+extern float aTemperature;
+extern float bTemperature;
+extern float pumpVoltage;
+extern float pumpCurrent;
+extern float peltierVoltage;
+extern float peltierCurrent;
+extern float previousFreq; 
+extern float dacVoltage;   
 
 // Web dashboard error handling
 void updateErrorStatus(String errorMessage) {
@@ -87,7 +129,7 @@ void handleWebRequests(WiFiServer& server) {
       client.print(",");
       client.print(SetpointWB);
       client.print(",");
-      client.print(WBTemp_atm);
+      client.print(SWBTemp_atm);
       client.print(",");
       client.print(braintemp_atm);
       client.print(",");
@@ -222,7 +264,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("<p>Derivative: <span id='derivativeValue'>0</span></p>");
     client.println("<p>Setpoint Peltier: <span id='setpointPeltierValue'>" + String(SetpointPeltier) + "</span></p>");  // Display SetpointPeltier
     client.println("<p>Setpoint WB: <span id='setpointWBValue'>" + String(SetpointWB) + "</span></p>");  // Display SetpointWB
-    client.println("<p>Scalp Water Block Temperature: <span id='WBTempValue'>0.0</span></p>");
+    client.println("<p>Scalp Water Block Temperature: <span id='SWBTempValue'>0.0</span></p>");
     client.println("<p>Brain Temperature: <span id='brainTempValue'>0.0</span></p>");
     client.println("<p>Flow Rate A: <span id='aFlowValue'>0.0</span></p>");
     client.println("<p>Flow Rate B: <span id='bFlowValue'>0.0</span></p>");
@@ -257,7 +299,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("let dataDerivative = [];");
     client.println("let dataSetpointPeltier = [];");
     client.println("let dataSetpointWB = [];");
-    client.println("let dataWBTemp = [];");
+    //client.println("let dataSWBTemp = [];");
     client.println("let dataBrainTemp = [];");
     client.println("let dataAFlow = [];");
     client.println("let dataBFlow = [];");
@@ -472,7 +514,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      let Kd_peltier = parseFloat(values[2]);");
     client.println("      let setpointPeltier = parseFloat(values[3]);");  // Read SetpointPeltier
     client.println("      let setpointWB = parseFloat(values[4]);");  // Read SetpointWB
-    client.println("      let waterBottleTemp = parseFloat(values[5]);");
+    client.println("      let waterBlockTemp = parseFloat(values[5]);");
     client.println("      let brainTemp = parseFloat(values[6]);");
     client.println("      let flowRateA = parseFloat(values[7]);");
     client.println("      let flowRateB = parseFloat(values[8]);");
@@ -491,7 +533,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      document.getElementById('derivativeValue').innerText = Kd_peltier;");
     client.println("      document.getElementById('setpointPeltierValue').innerText = setpointPeltier.toFixed(1);");  // Update display for SetpointPeltier
     client.println("      document.getElementById('setpointWBValue').innerText = setpointWB.toFixed(1);");  // Update display for SetpointWB
-    client.println("      document.getElementById('WBTempValue').innerText = waterBottleTemp.toFixed(1);");
+    client.println("      document.getElementById('SWBTempValue').innerText = waterBlockTemp.toFixed(1);");
     client.println("      document.getElementById('brainTempValue').innerText = brainTemp.toFixed(1);");
     client.println("      document.getElementById('aFlowValue').innerText = flowRateA.toFixed(1);");
     client.println("      document.getElementById('bFlowValue').innerText = flowRateB.toFixed(1);");
@@ -510,7 +552,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      dataDerivative.push(Kd_peltier);");
     client.println("      dataSetpointPeltier.push(setpointPeltier);");  // Store SetpointPeltier data
     client.println("      dataSetpointWB.push(setpointWB);");  // Store SetpointWB data
-    client.println("      dataWBTemp.push(waterBottleTemp);");
+    client.println("      dataSWBTemp.push(waterBlockTemp);");
     client.println("      dataBrainTemp.push(brainTemp);");
     client.println("      dataAFlow.push(flowRateA);");
     client.println("      dataBFlow.push(flowRateB);");
@@ -530,7 +572,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      if (dataDerivative.length > 100) { dataDerivative.shift(); }");
     client.println("      if (dataSetpointPeltier.length > 100) { dataSetpointPeltier.shift(); }");  // Limit SetpointPeltier data
     client.println("      if (dataSetpointWB.length > 100) { dataSetpointWB.shift(); }");  // Limit SetpointWB data
-    client.println("      if (dataWBTemp.length > 100) { dataWBTemp.shift(); }");
+    client.println("      if (dataSWBTemp.length > 100) { dataSWBTemp.shift(); }");
     client.println("      if (dataBrainTemp.length > 100) { dataBrainTemp.shift(); }");
     client.println("      if (dataAFlow.length > 100) { dataAFlow.shift(); }");
     client.println("      if (dataBFlow.length > 100) { dataBFlow.shift(); }");
@@ -606,4 +648,3 @@ void handleWebRequests(WiFiServer& server) {
 }
 
 #endif // WEBDASHBOARD_H
-
