@@ -54,10 +54,7 @@ const float pMax = 15.0;    // Maximum pressure in PSI
 
 // General global variables
 unsigned long waqt;
-int tempCount, pressureCount, flowCount, currentCount, noneCount;
-const int sampleSize = 10;  // Sample size
 const int NUMSAMPLES = 10;
-int decimalPlaces = 3;
 File dataFile;  //Initialization of SD card reader
 File logFile;  //Initialization of SD card reader
 #define DACPIN A12
@@ -132,14 +129,6 @@ uint16_t samples21[NUMSAMPLES];
 uint16_t samples22[NUMSAMPLES];
 uint16_t samples23[NUMSAMPLES];
 uint16_t samples24[NUMSAMPLES];
-uint16_t samples25[NUMSAMPLES];
-uint16_t samples26[NUMSAMPLES];
-uint16_t samples27[NUMSAMPLES];
-uint16_t samples28[NUMSAMPLES];
-uint16_t samples29[NUMSAMPLES];
-uint16_t samples30[NUMSAMPLES];
-uint16_t samples31[NUMSAMPLES];
-uint16_t samples32[NUMSAMPLES];
 
 //Relay Pin Placement
 int peltierRelay = 14;
@@ -173,8 +162,6 @@ void setup() {
 
   // put your setup code here, to run once:
   Serial.begin(9600);
-
-  
 
   //while (!Serial) {};
   //Turning on Multiplexer and Initializing Pins
@@ -360,39 +347,39 @@ void loop() {
 
     //Body Water Block Entrance (entrBWB) Temperatures
     int entrBWB1 = setMux(2, 0);
-    samples17[i] = analogRead(entrBWB1);
+    samples11[i] = analogRead(entrBWB1);
     int entrBWB2 = setMux(2, 1);
-    samples18[i] = analogRead(entrBWB2);
+    samples12[i] = analogRead(entrBWB2);
     int entrBWB3 = setMux(2, 2);
-    samples19[i] = analogRead(entrBWB3);
+    samples13[i] = analogRead(entrBWB3);
 
     //Body Water Block (BWB) Temperatures
     int BWB1 = setMux(2, 3);
-    samples20[i] = analogRead(BWB1);
+    samples14[i] = analogRead(BWB1);
     int BWB2 = setMux(2, 4);
-    samples21[i] = analogRead(BWB2);
+    samples15[i] = analogRead(BWB2);
     int BWB3 = setMux(2, 5);
-    samples22[i] = analogRead(BWB3);
+    samples16[i] = analogRead(BWB3);
     int BWB4 = setMux(2, 6);
-    samples23[i] = analogRead(BWB4);
+    samples17[i] = analogRead(BWB4);
     int BWB5 = setMux(2, 7);
-    samples24[i] = analogRead(BWB5);
+    samples18[i] = analogRead(BWB5);
     int BWB6 = setMux(2, 8);
-    samples25[i] = analogRead(BWB6);
+    samples19[i] = analogRead(BWB6);
 
     //Body Water Block Exit (exitBWB) Temperatures
     int exitBWB1 = setMux(2, 9);
-    samples26[i] = analogRead(exitBWB1);
+    samples20[i] = analogRead(exitBWB1);
     int exitBWB2 = setMux(2, 10);
-    samples27[i] = analogRead(exitBWB2);
+    samples21[i] = analogRead(exitBWB2);
     int exitBWB3 = setMux(2, 11);
-    samples28[i] = analogRead(exitBWB3);
+    samples22[i] = analogRead(exitBWB3);
 
     //Pressure Sensors
     int pressureSensor1 = setMux(2, 14);
-    samples29[i] = analogRead(pressureSensor1); 
+    samples23[i] = analogRead(pressureSensor1); 
     int pressureSensor2 = setMux(2, 15);
-    samples30[i] = analogRead(pressureSensor2);
+    samples24[i] = analogRead(pressureSensor2);
     delay(10);
   }
 
@@ -458,20 +445,20 @@ void loop() {
     avgSWB1 += samples8[i];
     avgSWB2 += samples9[i];
     avgSWB3 += samples10[i];
-    avgEntrBWB1 += samples17[i];
-    avgEntrBWB2 += samples18[i];
-    avgEntrBWB3 += samples19[i];
-    avgBWB1 += samples20[i];
-    avgBWB2 += samples21[i];
-    avgBWB3 += samples22[i];
-    avgBWB4 += samples23[i];
-    avgBWB5 += samples24[i];
-    avgBWB6 += samples25[i];
-    avgExitBWB1 += samples26[i];
-    avgExitBWB2 += samples27[i];
-    avgExitBWB3 += samples28[i];
-    avgPressureSensor1 += samples29[i];
-    avgPressureSensor2 += samples30[i];
+    avgEntrBWB1 += samples11[i];
+    avgEntrBWB2 += samples12[i];
+    avgEntrBWB3 += samples13[i];
+    avgBWB1 += samples14[i];
+    avgBWB2 += samples15[i];
+    avgBWB3 += samples16[i];
+    avgBWB4 += samples17[i];
+    avgBWB5 += samples18[i];
+    avgBWB6 += samples19[i];
+    avgExitBWB1 += samples20[i];
+    avgExitBWB2 += samples21[i];
+    avgExitBWB3 += samples22[i];
+    avgPressureSensor1 += samples23[i];
+    avgPressureSensor2 += samples24[i];
   }
 
   avgIntraArray1 = avgIntraArray1 / NUMSAMPLES;
