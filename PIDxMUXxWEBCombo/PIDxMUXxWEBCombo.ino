@@ -13,65 +13,9 @@
 #include <Arduino_AdvancedAnalog.h>
 #include "WebDashboard.h"
 
-
-//Define thermistor global variables for webdashboard and .h files 
-float steinhartIntraArray1 = 0.0;
-float steinhartIntraArray2 = 0.0; 
-float steinhartIntraArray3 = 0.0;
-float steinhartIntraArray4 = 0.0;
-float steinhartExtraArray1 = 0.0;
-float steinhartExtraArray2 = 0.0;
-float steinhartExtraArray3 = 0.0;
-float steinhartSWB1 = 0.0;
-float steinhartSWB2 = 0.0;
-float steinhartSWB3 = 0.0;
-float steinhartEntrBWB1 = 0.0;
-float steinhartEntrBWB2 = 0.0;
-float steinhartEntrBWB3 = 0.0;
-float steinhartBWB1 = 0.0;
-float steinhartBWB2 = 0.0;
-float steinhartBWB3 = 0.0;
-float steinhartBWB4 = 0.0;
-float steinhartBWB5 = 0.0;
-float steinhartBWB6 = 0.0;
-float steinhartExitBWB1 = 0.0;
-float steinhartExitBWB2 = 0.0;
-float steinhartExitBWB3 = 0.0;
-
-int steinhartIntraArray1_flag = 1;
-int steinhartIntraArray2_flag = 1; 
-int steinhartIntraArray3_flag = 1;
-int steinhartIntraArray4_flag = 1;
-int steinhartExtraArray1_flag = 1;
-int steinhartExtraArray2_flag = 1;
-int steinhartExtraArray3_flag = 1;
-int steinhartSWB1_flag = 1;
-int steinhartSWB2_flag = 1;
-int steinhartSWB3_flag = 1;
-int steinhartEntrBWB1_flag = 1;
-int steinhartEntrBWB2_flag = 1;
-int steinhartEntrBWB3_flag = 1;
-int steinhartBWB1_flag = 1;
-int steinhartBWB2_flag = 1;
-int steinhartBWB3_flag = 1;
-int steinhartBWB4_flag = 1;
-int steinhartBWB5_flag = 1;
-int steinhartBWB6_flag = 1;
-int steinhartExitBWB1_flag = 1;
-int steinhartExitBWB2_flag = 1;
-int steinhartExitBWB3_flag = 1;
-
-//Define avg thermistor global variables for webdashboard and .h files
-float braintemp_atm = 0.0; 
-float ExtraArrayTemp = 0.0;
-float SWBTemp_atm = 0.0;
-float EntrBWBTemp = 0.0;
-float BWBTemp = 0.0;
-float ExitBWBTemp = 0.0;
-
-//Define flow, pressure, current, and voltage global variables for webdashboard and .h files 
-float pressureApplied1;
-float pressureApplied2;
+//Define global variables for webdashboard and .h files
+float WBTemp_atm;
+float braintemp_atm;
 float aFlow = 0.0;
 float bFlow = 0.0;
 float aTemperature = 0.0;
@@ -80,14 +24,16 @@ float pumpVoltage;
 float pumpCurrent;
 float peltierVoltage;
 float peltierCurrent;
+float pressureApplied1;
+float pressureApplied2;
+int aFlow_bad;
+int bFlow_bad;
 float previousFreq = 0.0;          // Previous frequency to track changes
 float dacVoltage;         // Variable to store the calculated DAC output voltage
 
 // Define the flow sensor objects
 SensirionI2cSf06Lf flowSensorA;
 SensirionI2cSf06Lf flowSensorB;
-int aFlow_bad;
-int bFlow_bad;
 
 // Define current sensor objects and I2C addresses
 Adafruit_INA260 pumpINA260 = Adafruit_INA260();
@@ -108,7 +54,10 @@ const float pMax = 15.0;    // Maximum pressure in PSI
 
 // General global variables
 unsigned long waqt;
+int tempCount, pressureCount, flowCount, currentCount, noneCount;
+const int sampleSize = 10;  // Sample size
 const int NUMSAMPLES = 10;
+int decimalPlaces = 3;
 File dataFile;  //Initialization of SD card reader
 File logFile;  //Initialization of SD card reader
 #define DACPIN A12
@@ -155,8 +104,8 @@ int freq = 0;
 //Temperature controls for PID loops
 //These are parameters that can be adjusted for temperature cutoffs -- TempIdeals are equivalent to Setpoint
 int BrainTempIdeal = 25;  //Ideal brain temperature, currently 12 for testing purposes (should be 25)
-int SWBTempMax = 50;       //The maximum peltier plate temperature, currently 25 for testing purposes (should be 40)
-int SWBTempIdeal = 37;     //The ideal temperature of the WB, currently 22 for testing purposes (should be 35)
+int WBTempMax = 50;       //The maximum peltier plate temperature, currently 25 for testing purposes (should be 40)
+int WBTempIdeal = 37;     //The ideal temperature of the WB, currently 22 for testing purposes (should be 35)
 
 //These are vectors to save analog sensor data. Total of 32 of sensors
 uint16_t samples1[NUMSAMPLES];
@@ -183,6 +132,14 @@ uint16_t samples21[NUMSAMPLES];
 uint16_t samples22[NUMSAMPLES];
 uint16_t samples23[NUMSAMPLES];
 uint16_t samples24[NUMSAMPLES];
+uint16_t samples25[NUMSAMPLES];
+uint16_t samples26[NUMSAMPLES];
+uint16_t samples27[NUMSAMPLES];
+uint16_t samples28[NUMSAMPLES];
+uint16_t samples29[NUMSAMPLES];
+uint16_t samples30[NUMSAMPLES];
+uint16_t samples31[NUMSAMPLES];
+uint16_t samples32[NUMSAMPLES];
 
 //Relay Pin Placement
 int peltierRelay = 14;
@@ -216,6 +173,8 @@ void setup() {
 
   // put your setup code here, to run once:
   Serial.begin(9600);
+
+  
 
   //while (!Serial) {};
   //Turning on Multiplexer and Initializing Pins
@@ -318,7 +277,7 @@ void setup() {
   //Turning PID on
   SetpointPeltier = BrainTempIdeal;
   myPID_peltier.SetMode(AUTOMATIC);
-  SetpointWB = SWBTempIdeal;
+  SetpointWB = WBTempIdeal;
   myPID_WB.SetMode(AUTOMATIC);
 
   //Initializing DAC
@@ -401,67 +360,92 @@ void loop() {
 
     //Body Water Block Entrance (entrBWB) Temperatures
     int entrBWB1 = setMux(2, 0);
-    samples11[i] = analogRead(entrBWB1);
+    samples17[i] = analogRead(entrBWB1);
     int entrBWB2 = setMux(2, 1);
-    samples12[i] = analogRead(entrBWB2);
+    samples18[i] = analogRead(entrBWB2);
     int entrBWB3 = setMux(2, 2);
-    samples13[i] = analogRead(entrBWB3);
+    samples19[i] = analogRead(entrBWB3);
 
     //Body Water Block (BWB) Temperatures
     int BWB1 = setMux(2, 3);
-    samples14[i] = analogRead(BWB1);
+    samples20[i] = analogRead(BWB1);
     int BWB2 = setMux(2, 4);
-    samples15[i] = analogRead(BWB2);
+    samples21[i] = analogRead(BWB2);
     int BWB3 = setMux(2, 5);
-    samples16[i] = analogRead(BWB3);
+    samples22[i] = analogRead(BWB3);
     int BWB4 = setMux(2, 6);
-    samples17[i] = analogRead(BWB4);
+    samples23[i] = analogRead(BWB4);
     int BWB5 = setMux(2, 7);
-    samples18[i] = analogRead(BWB5);
+    samples24[i] = analogRead(BWB5);
     int BWB6 = setMux(2, 8);
-    samples19[i] = analogRead(BWB6);
+    samples25[i] = analogRead(BWB6);
 
     //Body Water Block Exit (exitBWB) Temperatures
     int exitBWB1 = setMux(2, 9);
-    samples20[i] = analogRead(exitBWB1);
+    samples26[i] = analogRead(exitBWB1);
     int exitBWB2 = setMux(2, 10);
-    samples21[i] = analogRead(exitBWB2);
+    samples27[i] = analogRead(exitBWB2);
     int exitBWB3 = setMux(2, 11);
-    samples22[i] = analogRead(exitBWB3);
+    samples28[i] = analogRead(exitBWB3);
 
     //Pressure Sensors
     int pressureSensor1 = setMux(2, 14);
-    samples23[i] = analogRead(pressureSensor1); 
+    samples29[i] = analogRead(pressureSensor1); 
     int pressureSensor2 = setMux(2, 15);
-    samples24[i] = analogRead(pressureSensor2);
+    samples30[i] = analogRead(pressureSensor2);
     delay(10);
   }
 
   //Average each sensors data
-  float avgIntraArray1 = 0.0;
-  float avgIntraArray2 = 0.0;
-  float avgIntraArray3 = 0.0;
-  float avgIntraArray4 = 0.0;
-  float avgExtraArray1 = 0.0;
-  float avgExtraArray2 = 0.0;
-  float avgExtraArray3 = 0.0;
-  float avgSWB1 = 0.0;
-  float avgSWB2 = 0.0;
-  float avgSWB3 = 0.0;
-  float avgEntrBWB1 = 0.0;
-  float avgEntrBWB2 = 0.0;
-  float avgEntrBWB3 = 0.0;
-  float avgBWB1 = 0.0;
-  float avgBWB2 = 0.0;
-  float avgBWB3 = 0.0;
-  float avgBWB4 = 0.0;
-  float avgBWB5 = 0.0;
-  float avgBWB6 = 0.0;
-  float avgExitBWB1 = 0.0;
-  float avgExitBWB2 = 0.0;
-  float avgExitBWB3 = 0.0;
-  float avgPressureSensor1 = 0.0;
-  float avgPressureSensor2 = 0.0;
+  float avgIntraArray1;
+  float avgIntraArray2;
+  float avgIntraArray3;
+  float avgIntraArray4;
+  float avgExtraArray1;
+  float avgExtraArray2;
+  float avgExtraArray3;
+  float avgSWB1;
+  float avgSWB2;
+  float avgSWB3;
+  float avgEntrBWB1;
+  float avgEntrBWB2;
+  float avgEntrBWB3;
+  float avgBWB1;
+  float avgBWB2;
+  float avgBWB3;
+  float avgBWB4;
+  float avgBWB5;
+  float avgBWB6;
+  float avgExitBWB1;
+  float avgExitBWB2;
+  float avgExitBWB3;
+  float avgPressureSensor1;
+  float avgPressureSensor2;
+
+  avgIntraArray1 = 0;
+  avgIntraArray2 = 0;
+  avgIntraArray3 = 0;
+  avgIntraArray4 = 0;
+  avgExtraArray1 = 0;
+  avgExtraArray2 = 0;
+  avgExtraArray3 = 0;
+  avgSWB1 = 0;
+  avgSWB2 = 0;
+  avgSWB3 = 0;
+  avgEntrBWB1 = 0;
+  avgEntrBWB2 = 0;
+  avgEntrBWB3 = 0;
+  avgBWB1 = 0;
+  avgBWB2 = 0;
+  avgBWB3 = 0;
+  avgBWB4 = 0;
+  avgBWB5 = 0;
+  avgBWB6 = 0;
+  avgExitBWB1 = 0;
+  avgExitBWB2 = 0;
+  avgExitBWB3 = 0;
+  avgPressureSensor1 = 0;
+  avgPressureSensor2 = 0;
 
   for (i = 0; i < NUMSAMPLES; i++) {
     avgIntraArray1 += samples1[i];
@@ -474,20 +458,20 @@ void loop() {
     avgSWB1 += samples8[i];
     avgSWB2 += samples9[i];
     avgSWB3 += samples10[i];
-    avgEntrBWB1 += samples11[i];
-    avgEntrBWB2 += samples12[i];
-    avgEntrBWB3 += samples13[i];
-    avgBWB1 += samples14[i];
-    avgBWB2 += samples15[i];
-    avgBWB3 += samples16[i];
-    avgBWB4 += samples17[i];
-    avgBWB5 += samples18[i];
-    avgBWB6 += samples19[i];
-    avgExitBWB1 += samples20[i];
-    avgExitBWB2 += samples21[i];
-    avgExitBWB3 += samples22[i];
-    avgPressureSensor1 += samples23[i];
-    avgPressureSensor2 += samples24[i];
+    avgEntrBWB1 += samples17[i];
+    avgEntrBWB2 += samples18[i];
+    avgEntrBWB3 += samples19[i];
+    avgBWB1 += samples20[i];
+    avgBWB2 += samples21[i];
+    avgBWB3 += samples22[i];
+    avgBWB4 += samples23[i];
+    avgBWB5 += samples24[i];
+    avgBWB6 += samples25[i];
+    avgExitBWB1 += samples26[i];
+    avgExitBWB2 += samples27[i];
+    avgExitBWB3 += samples28[i];
+    avgPressureSensor1 += samples29[i];
+    avgPressureSensor2 += samples30[i];
   }
 
   avgIntraArray1 = avgIntraArray1 / NUMSAMPLES;
@@ -540,38 +524,39 @@ void loop() {
   float avgExitBWB2Resist = SERIESRESISTOR / (1023 / (avgExitBWB2)-1);
   float avgExitBWB3Resist = SERIESRESISTOR / (1023 / (avgExitBWB3)-1);
   //Convert Resistance to Temperature
-  steinhartIntraArray1 = 1 / ((log(avgIntraArray1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartIntraArray2 = 1 / ((log(avgIntraArray2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartIntraArray3 = 1 / ((log(avgIntraArray3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartIntraArray4 = 1 / ((log(avgIntraArray4Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartExtraArray1 = 1 / ((log(avgExtraArray1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartExtraArray2 = 1 / ((log(avgExtraArray2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartExtraArray3 = 1 / ((log(avgExtraArray3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartSWB1 = 1 / ((log(avgSWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartSWB2 = 1 / ((log(avgSWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartSWB3 = 1 / ((log(avgSWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartEntrBWB1 = 1 / ((log(avgEntrBWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartEntrBWB2 = 1 / ((log(avgEntrBWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartEntrBWB3 = 1 / ((log(avgEntrBWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartBWB1 = 1 / ((log(avgBWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartBWB2 = 1 / ((log(avgBWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartBWB3 = 1 / ((log(avgBWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartBWB4 = 1 / ((log(avgBWB4Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartBWB5 = 1 / ((log(avgBWB5Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartBWB6 = 1 / ((log(avgBWB6Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartExitBWB1 = 1 / ((log(avgExitBWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartExitBWB2 = 1 / ((log(avgExitBWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
-  steinhartExitBWB3 = 1 / ((log(avgExitBWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartIntraArray1 = 1 / ((log(avgIntraArray1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartIntraArray2 = 1 / ((log(avgIntraArray2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartIntraArray3 = 1 / ((log(avgIntraArray3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartIntraArray4 = 1 / ((log(avgIntraArray4Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartExtraArray1 = 1 / ((log(avgExtraArray1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartExtraArray2 = 1 / ((log(avgExtraArray2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartExtraArray3 = 1 / ((log(avgExtraArray3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartSWB1 = 1 / ((log(avgSWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartSWB2 = 1 / ((log(avgSWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartSWB3 = 1 / ((log(avgSWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartEntrBWB1 = 1 / ((log(avgEntrBWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartEntrBWB2 = 1 / ((log(avgEntrBWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartEntrBWB3 = 1 / ((log(avgEntrBWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartBWB1 = 1 / ((log(avgBWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartBWB2 = 1 / ((log(avgBWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartBWB3 = 1 / ((log(avgBWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartBWB4 = 1 / ((log(avgBWB4Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartBWB5 = 1 / ((log(avgBWB5Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartBWB6 = 1 / ((log(avgBWB6Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartExitBWB1 = 1 / ((log(avgExitBWB1Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartExitBWB2 = 1 / ((log(avgExitBWB2Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
+  float steinhartExitBWB3 = 1 / ((log(avgExitBWB3Resist / THERMISTORNOMINAL)) / BCOEFFICIENT + 1.0 / (TEMPERATURENOMINAL + 273.15)) - 273.15;
   
   //Average multiple temp sensors into 1 temperature
   float IntraArrayTemp = (steinhartIntraArray1 + steinhartIntraArray2 + steinhartIntraArray3 + steinhartIntraArray4) / 4;
-  ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
+  float ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
   float SWBTemp = (steinhartSWB1 + steinhartSWB3) / 2;  //steinhartSWB2 deleted due to bad sensor error
-  EntrBWBTemp = (steinhartEntrBWB1 + steinhartEntrBWB2 + steinhartEntrBWB3) / 3;
-  BWBTemp = (steinhartBWB1 + steinhartBWB2 + steinhartBWB3 + steinhartBWB5 + steinhartBWB6) / 5; //steinhartBWB4 deleted due to bad sensor error
-  ExitBWBTemp = (steinhartExitBWB1 + steinhartExitBWB2 + steinhartExitBWB3) / 3;
+  float EntrBWBTemp = (steinhartEntrBWB1 + steinhartEntrBWB2 + steinhartEntrBWB3) / 3;
+  float BWBTemp = (steinhartBWB1 + steinhartBWB2 + steinhartBWB3 + steinhartBWB5 + steinhartBWB6) / 5; //steinhartBWB4 deleted due to bad sensor error
+  float ExitBWBTemp = (steinhartExitBWB1 + steinhartExitBWB2 + steinhartExitBWB3) / 3;
 
   //Peltier Plate PID
+  //float braintemp_atm;
   braintemp_atm = IntraArrayTemp;  //This is the current brain temperature
   InputPeltierPID = braintemp_atm;
   myPID_peltier.Compute(); 
@@ -579,9 +564,9 @@ void loop() {
   analogWrite(DACPIN, dacValue);
 
   //Water Pump/Block PID
-  SWBTemp_atm = SWBTemp;
-  if (SWBTemp_atm >= SWBTempIdeal) {
-    InputWB = SWBTemp_atm;
+  WBTemp_atm = SWBTemp;
+  if (WBTemp_atm >= WBTempIdeal) {
+    InputWB = WBTemp_atm;
     myPID_WB.Compute();
     freq = map(OutputWB, 0, 255, 0, 60);
     float quantizedFreq = round(freq / freqThreshold) * freqThreshold;
@@ -693,7 +678,7 @@ void loop() {
 
   //Sudden Flow Rate Drop Detection
   if (aFlow_bad == 0 && bFlow_bad == 0){
-    if ((aFlow <= 5 || bFlow <= 5) && SWBTemp_atm >= SWBTempMax) {
+    if ((aFlow <= 5 || bFlow <= 5) && WBTemp_atm >= WBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -710,7 +695,7 @@ void loop() {
     }
   }
   else if (aFlow_bad == 1 && bFlow_bad == 0){
-    if (bFlow <= 5 && SWBTemp_atm >= SWBTempMax) {
+    if (bFlow <= 5 && WBTemp_atm >= WBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -727,7 +712,7 @@ void loop() {
     }
   }
   else if (aFlow_bad == 0 && bFlow_bad == 1){
-    if (aFlow <= 5 && SWBTemp_atm >= SWBTempMax) {
+    if (aFlow <= 5 && WBTemp_atm >= WBTempMax) {
       digitalWrite(pumpRelay, HIGH);
       analogWrite(DACPIN, 255);
       digitalWrite(peltierRelay, HIGH);
@@ -784,7 +769,7 @@ void loop() {
   }
 
   //Water block temp 6 degrees above baseline and max flow rate --> Countdown for 3 minutes activates
-  if (SWBTemp_atm >= (SWBTemp_atm + 6) && freq == 60) {
+  if (WBTemp_atm >= (WBTemp_atm + 6) && freq == 60) {
     startTime = startTime;  //If maxxing out, keep the starttime of the max the same
   } else {
     int newTime = millis();  //If normal operations, update startime with current time
@@ -1018,10 +1003,6 @@ void loop() {
   Serial.print(SetpointPeltier);
   Serial.print(",");
   Serial.println(SetpointWB);
-
-  Serial.print("button:");
-  Serial.println(steinhartIntraArray1_flag);
-  
 
   Serial.print("Client Status:");
   Serial.println(clientStatus);
