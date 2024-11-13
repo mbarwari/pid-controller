@@ -222,7 +222,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("<p>Derivative: <span id='derivativeValue'>0</span></p>");
     client.println("<p>Setpoint Peltier: <span id='setpointPeltierValue'>" + String(SetpointPeltier) + "</span></p>");  // Display SetpointPeltier
     client.println("<p>Setpoint WB: <span id='setpointWBValue'>" + String(SetpointWB) + "</span></p>");  // Display SetpointWB
-    client.println("<p>Water Bottle Temperature: <span id='WBTempValue'>0.0</span></p>");
+    client.println("<p>Scalp Water Block Temperature: <span id='WBTempValue'>0.0</span></p>");
     client.println("<p>Brain Temperature: <span id='brainTempValue'>0.0</span></p>");
     client.println("<p>Flow Rate A: <span id='aFlowValue'>0.0</span></p>");
     client.println("<p>Flow Rate B: <span id='bFlowValue'>0.0</span></p>");
@@ -241,6 +241,8 @@ void handleWebRequests(WiFiServer& server) {
     client.println("<canvas id='flowRateChart' style='width: 200px; height: 100px;'></canvas>");
     client.println("<canvas id='powerChart' style='width: 200px; height: 100px;'></canvas>");
     client.println("<canvas id='pressureChart' style='width: 200px; height: 100px;'></canvas>");
+    client.println("<canvas id='frequencyChart' style='width: 200px; height: 100px;'></canvas>");
+    client.println("<canvas id='dacChart' style='width: 200px; height: 100px;'></canvas>");
 
     // Button to download CSV
     client.println("<button onclick='downloadCSV()'>Download CSV</button>");
@@ -309,7 +311,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("    data: {");
     client.println("      labels: labels,");
     client.println("      datasets: [{");
-    client.println("        label: 'Water Block Temp',");
+    client.println("        label: 'Scalp Water Block Temp',");
     client.println("        data: dataWBTemp,");
     client.println("        borderColor: 'orange',");
     client.println("        fill: false");
@@ -323,7 +325,7 @@ void handleWebRequests(WiFiServer& server) {
     client.println("    options: {");
     client.println("      scales: {");
     client.println("        x: { title: { display: true, text: 'Time' } },");
-    client.println("        y: { title: { display: true, text: 'Temperature (°C)' } }");
+    client.println("        y: { title: { display: true, text: 'Temperature (C)' } }");
     client.println("      }");
     client.println("    }");
     client.println("});");
@@ -410,13 +412,54 @@ void handleWebRequests(WiFiServer& server) {
     client.println("    },");
     client.println("    options: {");
     client.println("      scales: {");
-    client.println("        xAxes: [{");
-    client.println("          type: 'linear',");
-    client.println("          position: 'bottom'");
-    client.println("        }]");
+    client.println("        x: { title: { display: true, text: 'Time' } },");
+    client.println("        y: { title: { display: true, text: 'Pressure (PSI)' } }");
     client.println("      }");
     client.println("    }");
     client.println("});");
+
+    // Initialize the frequency chart
+    client.println("let ctx6 = document.getElementById('frequencyChart').getContext('2d');");
+    client.println("let frequencyChart = new Chart(ctx6, {");
+    client.println("    type: 'line',");
+    client.println("    data: {");
+    client.println("      labels: labels,");
+    client.println("      datasets: [{");
+    client.println("        label: 'Frequency Output',");
+    client.println("        data: dataPreviousFreq,");
+    client.println("        borderColor: 'blue',");
+    client.println("        fill: false");
+    client.println("      }]");
+    client.println("    },");
+    client.println("    options: {");
+    client.println("      scales: {");
+    client.println("        x: { title: { display: true, text: 'Time' } },");
+    client.println("        y: { title: { display: true, text: 'Frequency (Hz)' } }");
+    client.println("      }");
+    client.println("    }");
+    client.println("});");
+
+    // Initialize the frequency chart
+    client.println("let ctx7 = document.getElementById('dacChart').getContext('2d');");
+    client.println("let dacChart = new Chart(ctx7, {");
+    client.println("    type: 'line',");
+    client.println("    data: {");
+    client.println("      labels: labels,");
+    client.println("      datasets: [{");
+    client.println("        label: 'DAC Output',");
+    client.println("        data: dataDacVoltage,");
+    client.println("        borderColor: 'red',");
+    client.println("        fill: false");
+    client.println("      }]");
+    client.println("    },");
+    client.println("    options: {");
+    client.println("      scales: {");
+    client.println("        x: { title: { display: true, text: 'Time' } },");
+    client.println("        y: { title: { display: true, text: 'Voltage (V)' } }");
+    client.println("      }");
+    client.println("    }");
+    client.println("});");
+
 
     // Function to update the chart and value without refreshing the page
     client.println("function updateValue() {");
@@ -507,6 +550,8 @@ void handleWebRequests(WiFiServer& server) {
     client.println("      flowRateChart.update();");
     client.println("      powerChart.update();");
     client.println("      pressureChart.update();");  
+    client.println("      frequencyChart.update();");  
+    client.println("      dacChart.update();");  
     client.println("    }");
     client.println("  };");
     client.println("  xhr.open('GET', '/getValues', true);");
@@ -529,7 +574,7 @@ void handleWebRequests(WiFiServer& server) {
 
     // Function to download CSV
     client.println("function downloadCSV() {");
-    client.println("  let csvContent = 'data:text/csv;charset=utf-8,Time,Proportional,Integral,Derivative,Water Block Temp,Brain Temp,Flow Rate A,Flow Rate B\\n';");
+    client.println("  let csvContent = 'data:text/csv;charset=utf-8,Time,Proportional,Integral,Derivative,Scalp Water Block Temp,Brain Temp,Flow Rate A,Flow Rate B\\n';");
     client.println("  for (let i = 0; i < dataProportional.length; i++) {");
     client.println("    csvContent += labels[i] + ',' + dataProportional[i] + ',' + dataIntegral[i] + ',' + dataDerivative[i] + ',' + dataWBTemp[i] + ',' + dataBrainTemp[i] + ',' + dataAFlow[i] + ',' + dataBFlow[i] + '\\n';");
     client.println("  }");

@@ -254,7 +254,7 @@ void setup() {
   //Opening the file we want to save in
   dataFile = SD.open("data.txt", FILE_WRITE);  //Change file name here
   //The line below establishes column headers for save file. Always seperate with comma when adding new ones*/
-  dataFile.println("Time,IntraArray1 (C),IntraArray2 (C),IntraArray3 (C),IntraArray4 (C),ExtraArray1 (C),ExtraArray2 (C),ExtraArray3 (C),ScalpWB1 (C),ScalpWB2 (C),ScalpWB3 (C),EntrBWB1 (C),EntrBWB2 (C),EntrBWB3 (C),BWB1 (C),BWB2 (C),BWB3 (C),BWB4 (C),BWB5 (C),BWB6 (C),ExitBWB1 (C),ExitBWB2 (C),ExitBWB3 (C),Peltier Current (A),Peltier Voltage (V),Pump Current (A),Pump Voltage (V),Flow Sensor 1 (mL/min),Flow Sensor 2 (mL/min),Pressure1 (psi),Pressure2 (psi),P,I,D,SetpointPeltier Temp,WiFI Client Status (0 = USB, 1 = WiFi), previousFreq, dacVoltage");
+  dataFile.println("Time,IntraArray1 (C),IntraArray2 (C),IntraArray3 (C),IntraArray4 (C),ExtraArray1 (C),ExtraArray2 (C),ExtraArray3 (C),ScalpWB1 (C),ScalpWB2 (C),ScalpWB3 (C),EntrBWB1 (C),EntrBWB2 (C),EntrBWB3 (C),BWB1 (C),BWB2 (C),BWB3 (C),BWB4 (C),BWB5 (C),BWB6 (C),ExitBWB1 (C),ExitBWB2 (C),ExitBWB3 (C),Peltier Current (A),Peltier Voltage (V),Pump Current (A),Pump Voltage (V),Flow Sensor 1 (mL/min),Flow Sensor 2 (mL/min),Pressure1 (psi),Pressure2 (psi),P,I,D,SetpointPeltier Temp,SetpointWB Temp,WiFI Client Status (0 = USB, 1 = WiFi), previousFreq, dacVoltage");
   dataFile.close();
 
   //Opening the file we want to save in
@@ -550,9 +550,9 @@ void loop() {
   //Average multiple temp sensors into 1 temperature
   float IntraArrayTemp = (steinhartIntraArray1 + steinhartIntraArray2 + steinhartIntraArray3 + steinhartIntraArray4) / 4;
   float ExtraArrayTemp = (steinhartExtraArray1 + steinhartExtraArray2 + steinhartExtraArray3) / 3;
-  float SWBTemp = (steinhartSWB1 + steinhartSWB3) / 2;  //steinhartSWB3 deleted due to bad sensor error
+  float SWBTemp = (steinhartSWB1 + steinhartSWB3) / 2;  //steinhartSWB2 deleted due to bad sensor error
   float EntrBWBTemp = (steinhartEntrBWB1 + steinhartEntrBWB2 + steinhartEntrBWB3) / 3;
-  float BWBTemp = (steinhartBWB1 + steinhartBWB2 + steinhartBWB3 + steinhartBWB4 + steinhartBWB5 + steinhartBWB6) / 6;
+  float BWBTemp = (steinhartBWB1 + steinhartBWB2 + steinhartBWB3 + steinhartBWB5 + steinhartBWB6) / 5; //steinhartBWB4 deleted due to bad sensor error
   float ExitBWBTemp = (steinhartExitBWB1 + steinhartExitBWB2 + steinhartExitBWB3) / 3;
 
   //Peltier Plate PID
@@ -889,6 +889,8 @@ void loop() {
   dataFile.print(",");
   dataFile.print(SetpointPeltier);
   dataFile.print(",");
+  dataFile.print(SetpointWB);
+  dataFile.print(",");
   dataFile.print(clientStatus);
   dataFile.print(",");
   dataFile.print(previousFreq);
@@ -978,6 +980,9 @@ void loop() {
   Serial.print(dacVoltage, 2); // Print voltage with 2 decimal places
   Serial.println(" V");
 
+  Serial.print("OutputPeltierPID:");
+  Serial.println(OutputPeltierPID); // Print voltage with 2 decimal places
+
   Serial.print("Pressure Sensors:");
   Serial.print(pressureApplied1);
   Serial.print(",");
@@ -995,7 +1000,9 @@ void loop() {
   Serial.print(",");
   Serial.print(Kd_peltier);
   Serial.print(",");
-  Serial.println(SetpointPeltier);
+  Serial.print(SetpointPeltier);
+  Serial.print(",");
+  Serial.println(SetpointWB);
 
   Serial.print("Client Status:");
   Serial.println(clientStatus);
