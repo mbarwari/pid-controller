@@ -1,16 +1,13 @@
 /*******************************************************
   Combined ESP32-S2/S3 Example with WiFi WPA2-Enterprise and ADC Calibration,
-  with non-blocking INA260 sensor initialization and a continuously updated webpage.
+  with non-blocking INA260 sensor initialization, PWM/DAC control via sliders,
+  and a continuously updated webpage.
   
   Changes:
-    1. DAC output is now controlled via a slider (0 to 255, step 10) and an update button.
-    2. PWM frequency is controlled via a slider (0 to 60 Hz, step 10) and an update button.
-  
-  Endpoints:
-    "/"       - Serves an HTML page that continuously fetches JSON sensor data and provides PWM/DAC controls.
-    "/data"   - Returns JSON sensor/output data.
-    "/setPWM" - Accepts a "value" parameter to set the PWM frequency.
-    "/setDAC" - Accepts a "value" parameter to set the DAC output.
+    1. DAC output is controlled via a slider (0–255 in steps of 10) with a push button.
+    2. PWM frequency is controlled via a slider (0–60 Hz in steps of 10) with a push button.
+    3. Sensor readings are updated once per second using millis() so that the server
+       remains responsive.
 ********************************************************/
 
 #include <Arduino.h>
@@ -62,7 +59,7 @@ WebServer server(80);
 int dacValue = 0;  // Controlled via slider (0 to 255)
 
 // ================= MUX + ADC Configuration =================
-// MUX1 is connected to ADC1_CHANNEL_0 and MUX2 to ADC1_CHANNEL_1
+// MUX1 is connected to ADC1_CHANNEL_0, MUX2 to ADC1_CHANNEL_1
 #define MUX1_ADC1_CHANNEL ADC1_CHANNEL_0
 #define MUX2_ADC1_CHANNEL ADC1_CHANNEL_1
 
@@ -98,7 +95,7 @@ esp_adc_cal_characteristics_t adc1_chars;
 // ========== Function Declarations ==========
 void initPWM();
 uint32_t setFrequency(uint32_t freq);
-void initDAC();           // Now simply sets initial DAC state
+void initDAC();           // Initialize DAC output
 void updateDACOutput();   // Writes current dacValue to DAC
 
 void initMuxPins();
@@ -111,6 +108,9 @@ void handleAllData();
 void handleRoot();
 void handleSetPWM();
 void handleSetDAC();
+
+// Use a non-blocking approach for sensor reading updates.
+unsigned long lastSensorUpdate = 0;
 
 // ================= SETUP =================
 void setup() {
@@ -149,7 +149,6 @@ void setup() {
 
   // ----------- I2C and Sensor Setup -----------
   Wire.begin();
-  
   ina1Found = currentSensor1.begin(inaAddress1, &Wire);
   if (ina1Found)
     Serial.println("Found INA260 sensor #1.");
@@ -169,7 +168,7 @@ void setup() {
 
   // ----------- PWM and DAC Setup -----------
   initPWM();
-  initDAC(); // Initializes DAC with current dacValue
+  initDAC();
 
   // ----------- MUX Pins Setup -----------
   initMuxPins();
@@ -187,97 +186,97 @@ void setup() {
 // ================= LOOP =================
 void loop() {
   server.handleClient();
-  // Note: We no longer update the DAC output automatically.
-  // PWM frequency and DAC output are updated only when you press the buttons.
+  
+  // Update sensor readings once per second
+  if (millis() - lastSensorUpdate >= 1000) {
+    lastSensorUpdate = millis();
+    
+    // ----------- INA260 Sensor Readings -----------
+    float ina1_current = 0.0, ina1_busVoltage = 0.0, ina1_power = 0.0;
+    if (ina1Found) {
+      ina1_current = currentSensor1.readCurrent();
+      ina1_busVoltage = currentSensor1.readBusVoltage() / 1000.0;
+      ina1_power = currentSensor1.readPower();
+    }
+    Serial.print("[INA260 #1] Current (mA): ");
+    Serial.print(ina1_current);
+    Serial.print("  Bus Voltage (V): ");
+    Serial.print(ina1_busVoltage);
+    Serial.print("  Power (mW): ");
+    Serial.println(ina1_power);
 
-  // ----------- INA260 Sensor Readings -----------
-  float ina1_current = 0.0, ina1_busVoltage = 0.0, ina1_power = 0.0;
-  if (ina1Found) {
-    ina1_current = currentSensor1.readCurrent();
-    ina1_busVoltage = currentSensor1.readBusVoltage() / 1000.0;
-    ina1_power = currentSensor1.readPower();
-  }
-  Serial.print("[INA260 #1] Current (mA): ");
-  Serial.print(ina1_current);
-  Serial.print("  Bus Voltage (V): ");
-  Serial.print(ina1_busVoltage);
-  Serial.print("  Power (mW): ");
-  Serial.println(ina1_power);
+    float ina2_current = 0.0, ina2_busVoltage = 0.0, ina2_power = 0.0;
+    if (ina2Found) {
+      ina2_current = currentSensor2.readCurrent();
+      ina2_busVoltage = currentSensor2.readBusVoltage() / 1000.0;
+      ina2_power = currentSensor2.readPower();
+    }
+    Serial.print("[INA260 #2] Current (mA): ");
+    Serial.print(ina2_current);
+    Serial.print("  Bus Voltage (V): ");
+    Serial.print(ina2_busVoltage);
+    Serial.print("  Power (mW): ");
+    Serial.println(ina2_power);
 
-  float ina2_current = 0.0, ina2_busVoltage = 0.0, ina2_power = 0.0;
-  if (ina2Found) {
-    ina2_current = currentSensor2.readCurrent();
-    ina2_busVoltage = currentSensor2.readBusVoltage() / 1000.0;
-    ina2_power = currentSensor2.readPower();
-  }
-  Serial.print("[INA260 #2] Current (mA): ");
-  Serial.print(ina2_current);
-  Serial.print("  Bus Voltage (V): ");
-  Serial.print(ina2_busVoltage);
-  Serial.print("  Power (mW): ");
-  Serial.println(ina2_power);
+    // ----------- Sensirion SF06 Reading -----------
+    float sf06_flow = 0.0, sf06_temperature = 0.0;
+    uint16_t sf06_flags = 0;
+    sensor.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3C_1300F,
+                                 sf06_flow, sf06_temperature, sf06_flags);
+    Serial.print("[SF06] Flow (ml/min): ");
+    Serial.print(sf06_flow);
+    Serial.print("  Temp (C): ");
+    Serial.print(sf06_temperature);
+    Serial.print("  Flags: ");
+    Serial.println(sf06_flags);
 
-  // ----------- Sensirion SF06 Reading -----------
-  float sf06_flow = 0.0, sf06_temperature = 0.0;
-  uint16_t sf06_flags = 0;
-  sensor.readMeasurementData(INV_FLOW_SCALE_FACTORS_SLF3C_1300F,
-                               sf06_flow, sf06_temperature, sf06_flags);
-  Serial.print("[SF06] Flow (ml/min): ");
-  Serial.print(sf06_flow);
-  Serial.print("  Temp (C): ");
-  Serial.print(sf06_temperature);
-  Serial.print("  Flags: ");
-  Serial.println(sf06_flags);
-
-  // ----------- MUX1 Readings (Thermistors) -----------
-  Serial.println("=== MUX1 (Thermistors) ===");
-  for (int ch = 0; ch < 16; ch++) {
-    setMux(1, ch);
-    float tempC = readThermistor(1);
-    Serial.print(" MUX1 Ch");
-    Serial.print(ch);
-    Serial.print(" => ");
-    Serial.print(tempC, 2);
-    Serial.println(" °C");
-    delay(10);
-  }
-
-  // ----------- MUX2 Readings (Pressure 0-3, Thermistors 4-15) -----------
-  Serial.println("=== MUX2 (Pressure 0-3, Thermistors 4-15) ===");
-  for (int ch = 0; ch < 16; ch++) {
-    setMux(2, ch);
-    if (ch <= 3) {
-      float p = readPressure(2);
-      Serial.print(" MUX2 Ch");
-      Serial.print(ch);
-      Serial.print(" => ");
-      Serial.print(p, 2);
-      Serial.println(" PSI");
-    } else {
-      float tempC = readThermistor(2);
-      Serial.print(" MUX2 Ch");
+    // ----------- MUX1 Readings (Thermistors) -----------
+    Serial.println("=== MUX1 (Thermistors) ===");
+    for (int ch = 0; ch < 16; ch++) {
+      setMux(1, ch);
+      float tempC = readThermistor(1);
+      Serial.print(" MUX1 Ch");
       Serial.print(ch);
       Serial.print(" => ");
       Serial.print(tempC, 2);
       Serial.println(" °C");
+      delayMicroseconds(500);  // Minimal pause
     }
-    delay(10);
+
+    // ----------- MUX2 Readings (Pressure 0-3, Thermistors 4-15) -----------
+    Serial.println("=== MUX2 (Pressure 0-3, Thermistors 4-15) ===");
+    for (int ch = 0; ch < 16; ch++) {
+      setMux(2, ch);
+      if (ch <= 3) {
+        float p = readPressure(2);
+        Serial.print(" MUX2 Ch");
+        Serial.print(ch);
+        Serial.print(" => ");
+        Serial.print(p, 2);
+        Serial.println(" PSI");
+      } else {
+        float tempC = readThermistor(2);
+        Serial.print(" MUX2 Ch");
+        Serial.print(ch);
+        Serial.print(" => ");
+        Serial.print(tempC, 2);
+        Serial.println(" °C");
+      }
+      delayMicroseconds(500);  // Minimal pause
+    }
+    
+    Serial.println("----- End of cycle -----\n");
   }
-  
-  Serial.println("----- End of cycle -----\n");
-  delay(1000);
 }
 
 // ================= HTTP Server Handlers =================
 
-// Root page: displays sensor data and provides sliders with push buttons for PWM and DAC control.
+// Root page: displays sensor data and provides sliders and push buttons.
 void handleRoot() {
   String page = "<!DOCTYPE html><html><head><title>ESP32 Sensor Data</title>";
-  page += "<style>";
-  page += "body { font-family: Arial, sans-serif; margin: 20px; }";
+  page += "<style>body { font-family: Arial, sans-serif; margin: 20px; }";
   page += "pre { background: #f4f4f4; padding: 10px; }";
-  page += "input { width: 300px; margin: 10px 0; }";
-  page += "</style></head><body>";
+  page += "input, button { width: 300px; margin: 10px 0; font-size:16px; }</style></head><body>";
   page += "<h1>ESP32 Sensor Data</h1>";
   page += "<pre id='data'>Loading data...</pre>";
   page += "<h2>Control PWM Frequency</h2>";
@@ -289,7 +288,6 @@ void handleRoot() {
   page += "<p>DAC Value: <span id='dacValue'>" + String(dacValue) + "</span></p>";
   page += "<button id='updateDAC'>Update DAC</button>";
   page += "<script>";
-  // Function to fetch sensor data every second
   page += "function fetchData() {";
   page += "  fetch('/data').then(response => response.json()).then(data => {";
   page += "    document.getElementById('data').innerText = JSON.stringify(data, null, 2);";
@@ -299,21 +297,18 @@ void handleRoot() {
   page += "}";
   page += "fetchData();";
   page += "setInterval(fetchData, 1000);"; // Update every second
-
   // PWM update button event
   page += "document.getElementById('updatePWM').addEventListener('click', function() {";
   page += "  var val = document.getElementById('pwmSlider').value;";
   page += "  document.getElementById('pwmValue').innerText = val;";
   page += "  fetch('/setPWM?value=' + val);";
   page += "});";
-
   // DAC update button event
   page += "document.getElementById('updateDAC').addEventListener('click', function() {";
   page += "  var val = document.getElementById('dacSlider').value;";
   page += "  document.getElementById('dacValue').innerText = val;";
   page += "  fetch('/setDAC?value=' + val);";
   page += "});";
-
   page += "</script></body></html>";
   server.send(200, "text/html", page);
 }
@@ -331,7 +326,7 @@ void handleSetPWM() {
     uint32_t actualFreq = setFrequency(newFreq);
     Serial.printf("PWM frequency set to: %d Hz (actual: %d Hz)\n", newFreq, actualFreq);
   }
-  server.send(204);
+  server.send(204); // No content
 }
 
 // Sets the DAC output based on the "value" parameter.
@@ -341,7 +336,7 @@ void handleSetDAC() {
     updateDACOutput();
     Serial.printf("DAC value set to: %d\n", dacValue);
   }
-  server.send(204);
+  server.send(204); // No content
 }
 
 // ================= PWM Functions =================
